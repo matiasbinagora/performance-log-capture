@@ -14,6 +14,7 @@
     "performance:run": "tsx scripts/performance-run.ts",
     "typecheck": "tsc --noEmit",
     "build": "tsc -p tsconfig.build.json",
+    "log-analysis": "tsx scripts/log-analysis.ts",
     "start": "node dist/server.js",
     "openspec:validate": "openspec validate performance-log-capture --strict"
   },

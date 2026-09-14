@@ -31,11 +31,11 @@
 
 ## 4. Log analysis pipeline — PER-27
 
-- [ ] 4.1 Implement streaming parsers and schema validation for complete run artifacts.
-- [ ] 4.2 Implement metric aggregation by operation and overall run.
-- [ ] 4.3 Select representative success, slow, and error examples without loading the complete log into model context.
-- [ ] 4.4 Implement incomplete-input handling that reports missing or malformed files without invented conclusions.
-- [ ] 4.5 Create the local Codex `logging-agent` instructions in English with input, commands, evidence rules, and output contract.
+- [x] 4.1 Implement streaming parsers and schema validation for complete run artifacts.
+- [x] 4.2 Implement metric aggregation by operation and overall run.
+- [x] 4.3 Select representative success, slow, and error examples without loading the complete log into model context.
+- [x] 4.4 Implement incomplete-input handling that reports missing or malformed files without invented conclusions.
+- [x] 4.5 Create the local Codex `logging-agent` instructions in English with input, commands, evidence rules, and output contract.
 - [ ] 4.6 Add the Graphify query handoff for the search handler, delay, and error branch.
 - [ ] 4.7 Analyze complete and incomplete fixtures and record stable output evidence for PER-27.
 

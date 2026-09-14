@@ -174,7 +174,33 @@ Each run creates `runs/<run-id>/config.json`, `requests.jsonl`,
 `application.log`, and `summary.json`. The summary records actual counts,
 operation distribution, duration, errors, latency percentiles, and
 `throughput.requestsPerSecond` (completed requests per elapsed second, rounded
-aborted after `--request-timeout-ms` (default 10000 ms); Ctrl-C
-marks a run `incomplete`; incomplete runs are never passing results. The
-command rejects unknown options before checking the application and prints the
-exact `logging-agent` handoff command when it finishes.
+to two decimals). Requests time out after `--request-timeout-ms` (default 10000
+ms); Ctrl-C marks a run `incomplete`; incomplete runs are never passing
+results. The command rejects unknown options before checking the application
+and prints the exact `logging-agent` handoff command when it finishes.
+
+## Log analysis agent
+
+Analyze a run with the local English `logging-agent` support script:
+
+```bash
+npm run log-analysis -- --input runs/<run-id> --output runs/<run-id>/<run-id>-analysis.json
+```
+
+The analyzer validates all four required artifacts, streams `requests.jsonl`,
+correlates records by run ID, and writes deterministic machine-readable JSON.
+It reports request volume, success and failure counts, status codes, errors,
+average/p50/p95/p99/max latency, throughput, interruption state, validation
+issues, and up to three source-traceable examples for success, slow, and error
+events. It never silently drops malformed or duplicate records: excluded
+records are listed with file and line references.
+
+Latency averages and maxima are exact. Percentiles use a deterministic fixed
+sample (up to 10,000 latencies) so very large JSONL files do not grow analyzer
+memory without bound; request/error counters continue to cover the full file.
+
+Exit codes are `0` for a complete analysis, `2` for malformed/incomplete input,
+and `1` for an analyzer failure. Incomplete input contains no derived findings
+or invented root cause. The output includes a future `dashboardPath` for the
+standalone dashboard and labels Graphify as `code evidence unavailable` until a
+ Graphify result is supplied with `--graphify-evidence <path>`.
