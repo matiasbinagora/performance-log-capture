@@ -20,22 +20,22 @@
 
 ## 3. Performance run artifacts — PER-26
 
-- [x] 3.1 Define the run configuration, request event, summary, and incomplete-run schemas.
-- [x] 3.2 Implement a streaming load runner with gradual ramp-up and the default 60-second/20,000-request profile.
-- [x] 3.3 Create a unique `runs/<run-id>/` directory without overwriting previous runs.
-- [x] 3.4 Persist `config.json`, `requests.jsonl`, `application.log`, and `summary.json` for completed runs.
-- [x] 3.5 Calculate actual counts, operation distribution, duration, error rate, average, p50, p95, p99, and maximum latency.
-- [x] 3.6 Mark interrupted or incomplete runs as `incomplete` and prevent them from being reported as passing.
-- [x] 3.7 Create the local Codex `performance-agent` instructions in English with prerequisites, stop rules, and handoff command.
-- [x] 3.8 Execute two runs and verify unique IDs, preserved artifacts, and correct summary values.
+- [ ] 3.1 Define the run configuration, request event, summary, and incomplete-run schemas.
+- [ ] 3.2 Implement a streaming load runner with gradual ramp-up and the default 60-second/20,000-request profile.
+- [ ] 3.3 Create a unique `runs/<run-id>/` directory without overwriting previous runs.
+- [ ] 3.4 Persist `config.json`, `requests.jsonl`, `application.log`, and `summary.json` for completed runs.
+- [ ] 3.5 Calculate actual counts, operation distribution, duration, error rate, average, p50, p95, p99, and maximum latency.
+- [ ] 3.6 Mark interrupted or incomplete runs as `incomplete` and prevent them from being reported as passing.
+- [ ] 3.7 Create the local Codex `performance-agent` instructions in English with prerequisites, stop rules, and handoff command.
+- [ ] 3.8 Execute two runs and verify unique IDs, preserved artifacts, and correct summary values.
 
 ## 4. Log analysis pipeline — PER-27
 
-- [x] 4.1 Implement streaming parsers and schema validation for complete run artifacts.
-- [x] 4.2 Implement metric aggregation by operation and overall run.
-- [x] 4.3 Select representative success, slow, and error examples without loading the complete log into model context.
-- [x] 4.4 Implement incomplete-input handling that reports missing or malformed files without invented conclusions.
-- [x] 4.5 Create the local Codex `logging-agent` instructions in English with input, commands, evidence rules, and output contract.
+- [ ] 4.1 Implement streaming parsers and schema validation for complete run artifacts.
+- [ ] 4.2 Implement metric aggregation by operation and overall run.
+- [ ] 4.3 Select representative success, slow, and error examples without loading the complete log into model context.
+- [ ] 4.4 Implement incomplete-input handling that reports missing or malformed files without invented conclusions.
+- [ ] 4.5 Create the local Codex `logging-agent` instructions in English with input, commands, evidence rules, and output contract.
 - [ ] 4.6 Add the Graphify query handoff for the search handler, delay, and error branch.
 - [ ] 4.7 Analyze complete and incomplete fixtures and record stable output evidence for PER-27.
 
