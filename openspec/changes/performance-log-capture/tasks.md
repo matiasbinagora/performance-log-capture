@@ -10,13 +10,13 @@
 
 ## 2. Deterministic performance behavior — PER-25
 
-- [ ] 2.1 Add configuration parsing and validation for delay, error rate, duration, target requests, and random seed.
-- [ ] 2.2 Implement the search-only intentional delay with a documented timing tolerance.
-- [ ] 2.3 Implement seeded deterministic search errors with a non-zero readable default rate.
-- [ ] 2.4 Add request ID and run ID propagation to every structured JSONL request event.
-- [ ] 2.5 Add request log fields for operation, status, duration, timestamp, and error code.
-- [ ] 2.6 Add tests proving detail is fast, search is delayed, and identical seeds reproduce outcomes.
-- [ ] 2.7 Run identical and different-seed scenarios and attach redacted evidence to PER-25.
+- [x] 2.1 Add configuration parsing and validation for delay, error rate, duration, target requests, and random seed.
+- [x] 2.2 Implement the search-only intentional delay with a documented timing tolerance.
+- [x] 2.3 Implement seeded deterministic search errors with a non-zero readable default rate.
+- [x] 2.4 Add request ID and run ID propagation to every structured JSONL request event.
+- [x] 2.5 Add request log fields for operation, status, duration, timestamp, and error code.
+- [x] 2.6 Add tests proving detail is fast, search is delayed, and identical seeds reproduce outcomes.
+- [x] 2.7 Run identical and different-seed scenarios and attach redacted evidence to PER-25.
 
 ## 3. Performance run artifacts — PER-26
 

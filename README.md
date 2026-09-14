@@ -118,3 +118,31 @@ Open `http://localhost:3000` in a desktop browser. Search for a product or
 category such as `desk` or `office`, then select **View details**. The page
 uses same-origin API requests and visibly reports loading, empty, and error
 states without external services.
+
+## Performance scenario configuration
+
+The application reads these optional environment variables. Defaults are
+safe for local development and the request limit and duration have hard upper
+bounds to prevent accidental unbounded runs:
+
+| Variable | Default | Purpose |
+| --- | ---: | --- |
+| `SCENARIO` | `catalog` | Selects the local catalog scenario. |
+| `SEARCH_DELAY_MS` | `250` | Intentional delay applied only to search. Maximum `60000`. |
+| `SEARCH_ERROR_RATE` | `0.02` | Deterministic search failure rate from `0` to `1`. |
+| `LOAD_DURATION_SECONDS` | `60` | Future load-run duration. Maximum `3600`. |
+| `TARGET_REQUESTS` | `20000` | Future load-run target. Maximum `100000`. |
+| `RANDOM_SEED` | `42` | Seed used to choose search failures. |
+| `RUN_ID` | `local` | Safe identifier included in request events. |
+
+For example, run a readable failing scenario locally with:
+
+```bash
+SEARCH_DELAY_MS=100 SEARCH_ERROR_RATE=0.1 RANDOM_SEED=7 RUN_ID=demo-1 npm run dev
+```
+
+Every completed request emits one JSON object per line to standard output with
+`runId`, a unique per-run `requestId`, `operation`, HTTP `status`, measured
+`duration`, ISO `timestamp`, and `errorCode` when applicable. Search failures
+return HTTP 503 with `SEARCH_SIMULATED_ERROR`. These events can be redirected
+to a file for a future performance run without a database or external service.
