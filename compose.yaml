@@ -1,0 +1,11 @@
+services:
+  catalog:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      HOST: 0.0.0.0
+      PORT: 3000
+    init: true
+    ports:
+      - "${PORT:-3000}:3000"

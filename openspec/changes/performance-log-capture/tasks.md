@@ -1,12 +1,12 @@
 ## 1. Repository and runtime foundation — PER-24
 
-- [ ] 1.1 Create the Node.js and TypeScript project files with scripts for development, testing, and production start.
-- [ ] 1.2 Add the deterministic local product dataset and catalog domain types.
-- [ ] 1.3 Implement `GET /health`, `GET /products/:id`, and `GET /products/search?q=<term>` with consistent JSON errors.
-- [ ] 1.4 Build the minimal browser catalog page with search, results, detail, loading, and error states.
-- [ ] 1.5 Add Dockerfile and Docker Compose configuration that starts the app with one documented command.
-- [ ] 1.6 Add unit/API tests for health, detail, search, 404 behavior, and deterministic results.
-- [ ] 1.7 Validate the container and browser UI, then record commands and commit hash for PER-24.
+- [x] 1.1 Create the Node.js and TypeScript project files with scripts for development, testing, and production start.
+- [x] 1.2 Add the deterministic local product dataset and catalog domain types.
+- [x] 1.3 Implement `GET /health`, `GET /products/:id`, and `GET /products/search?q=<term>` with consistent JSON errors.
+- [x] 1.4 Build the minimal browser catalog page with search, results, detail, loading, and error states.
+- [x] 1.5 Add Dockerfile and Docker Compose configuration that starts the app with one documented command.
+- [x] 1.6 Add unit/API tests for health, detail, search, 404 behavior, and deterministic results.
+- [x] 1.7 Validate the container and browser UI, then record commands and commit hash for PER-24.
 
 ## 2. Deterministic performance behavior — PER-25
 

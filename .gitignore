@@ -2,3 +2,9 @@
 .env.*
 !.env.example
 .superpowers/
+/.worktrees/
+node_modules/
+dist/
+coverage/
+npm-debug.log*
+test-results/
