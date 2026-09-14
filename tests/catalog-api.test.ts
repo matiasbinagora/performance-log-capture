@@ -135,4 +135,27 @@ describe('catalog API', () => {
       expect(typeof firstEvent.timestamp).toBe('string');
     }
   });
+
+  it('writes ROUTE_NOT_FOUND to the event for an unknown route', async () => {
+    const events: string[] = [];
+    const write = vi.spyOn(process.stdout, 'write').mockImplementation((chunk) => {
+      events.push(String(chunk));
+      return true;
+    });
+    try {
+      const response = await app.inject({ method: 'GET', url: '/not-a-route' });
+
+      expect(response.statusCode).toBe(404);
+      expect(response.json()).toMatchObject({ error: { code: 'ROUTE_NOT_FOUND', statusCode: 404 } });
+    } finally {
+      write.mockRestore();
+    }
+
+    expect(events).toHaveLength(1);
+    expect(JSON.parse(events[0]?.trim() ?? '')).toMatchObject({
+      operation: 'unknown',
+      status: 404,
+      errorCode: 'ROUTE_NOT_FOUND',
+    });
+  });
 });

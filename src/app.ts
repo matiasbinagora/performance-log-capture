@@ -42,6 +42,7 @@ export async function buildApp(
 
   app.setNotFoundHandler((request, reply) => {
     const error = new ApiError(404, 'ROUTE_NOT_FOUND', `Route '${request.method} ${request.url}' was not found.`);
+    markError(request, error.code);
     return reply.status(error.statusCode).send(error.toResponse());
   });
 
