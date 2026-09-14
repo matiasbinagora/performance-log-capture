@@ -1,8 +1,9 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
 
 import type { CatalogService } from '../application/catalog-service.js';
 import { normalizeSearchTerm } from '../application/catalog-service.js';
 import { ApiError } from './api-error.js';
+import type { ScenarioRuntime } from '../scenarios/deterministic-scenario.js';
 
 interface ProductParams {
   id: string;
@@ -15,6 +16,8 @@ interface SearchQuery {
 export function registerCatalogRoutes(
   app: FastifyInstance,
   catalogService: CatalogService,
+  scenarioRuntime: ScenarioRuntime,
+  markRequestError: (request: FastifyRequest, errorCode: string) => void,
 ): void {
   app.get('/health', () => ({ status: 'ok' as const }));
 
@@ -39,12 +42,14 @@ export function registerCatalogRoutes(
       throw new ApiError(400, 'SEARCH_QUERY_REQUIRED', "Query parameter 'q' is required.");
     }
 
-    const matchingProducts = catalogService.searchProducts(query);
+    return scenarioRuntime.prepareSearch().then((outcome) => {
+      if (outcome.failed && outcome.errorCode) {
+        markRequestError(request, outcome.errorCode);
+        throw new ApiError(503, outcome.errorCode, 'The search scenario produced a deterministic simulated failure.');
+      }
 
-    return {
-      query,
-      count: matchingProducts.length,
-      products: matchingProducts,
-    };
+      const matchingProducts = catalogService.searchProducts(query);
+      return { query, count: matchingProducts.length, products: matchingProducts };
+    });
   });
 }

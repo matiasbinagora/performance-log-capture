@@ -1,13 +1,26 @@
 import type { FastifyInstance } from 'fastify';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { buildApp } from '../src/app.js';
+import { loadScenarioConfig } from '../src/scenarios/scenario-config.js';
+
+const testScenarioConfig = loadScenarioConfig({ SEARCH_DELAY_MS: '0', SEARCH_ERROR_RATE: '0', RUN_ID: 'api-test' });
+
+interface RecordedEvent {
+  readonly runId: string;
+  readonly requestId: string;
+  readonly operation: string;
+  readonly status: number;
+  readonly duration: number;
+  readonly timestamp: string;
+  readonly errorCode?: string;
+}
 
 describe('catalog API', () => {
   let app: FastifyInstance;
 
   beforeEach(async () => {
-    app = await buildApp();
+    app = await buildApp(undefined, testScenarioConfig);
   });
 
   afterEach(async () => {
@@ -78,5 +91,48 @@ describe('catalog API', () => {
         statusCode: 400,
       },
     });
+  });
+
+  it('delays search without delaying product detail', async () => {
+    const delayedApp = await buildApp(undefined, loadScenarioConfig({ SEARCH_DELAY_MS: '25', SEARCH_ERROR_RATE: '0', RUN_ID: 'timing-test' }));
+    try {
+      const detailStartedAt = performance.now();
+      await delayedApp.inject({ method: 'GET', url: '/products/aurora-desk-lamp' });
+      const detailDuration = performance.now() - detailStartedAt;
+      const searchStartedAt = performance.now();
+      await delayedApp.inject({ method: 'GET', url: '/products/search?q=desk' });
+      const searchDuration = performance.now() - searchStartedAt;
+
+      expect(searchDuration).toBeGreaterThanOrEqual(20);
+      expect(searchDuration).toBeGreaterThan(detailDuration + 10);
+    } finally {
+      await delayedApp.close();
+    }
+  });
+
+  it('writes structured request events with unique IDs', async () => {
+    const events: string[] = [];
+    const write = vi.spyOn(process.stdout, 'write').mockImplementation((chunk) => {
+      events.push(String(chunk));
+      return true;
+    });
+    try {
+      await app.inject({ method: 'GET', url: '/health' });
+      await app.inject({ method: 'GET', url: '/products/unknown-product' });
+    } finally {
+      write.mockRestore();
+    }
+
+    const parsedEvents: RecordedEvent[] = events.map((event): RecordedEvent => JSON.parse(event.trim()) as RecordedEvent);
+    expect(parsedEvents).toHaveLength(2);
+    expect(new Set(parsedEvents.map((event) => event.requestId)).size).toBe(2);
+    expect(parsedEvents[0]).toMatchObject({ runId: 'api-test', operation: 'health', status: 200 });
+    expect(parsedEvents[1]).toMatchObject({ runId: 'api-test', operation: 'product_detail', status: 404, errorCode: 'PRODUCT_NOT_FOUND' });
+    const firstEvent = parsedEvents[0];
+    expect(firstEvent).toBeDefined();
+    if (firstEvent) {
+      expect(typeof firstEvent.duration).toBe('number');
+      expect(typeof firstEvent.timestamp).toBe('string');
+    }
   });
 });
