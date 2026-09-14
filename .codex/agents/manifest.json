@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "platform": "codex",
+  "agents": [
+    "global-aws-specialist",
+    "global-backend-developer",
+    "global-code-reviewer",
+    "global-frontend-developer",
+    "global-orchestrator",
+    "global-qa-automator",
+    "global-qa-manual"
+  ],
+  "skills": []
+}

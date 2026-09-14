@@ -1,0 +1,29 @@
+[mcp_servers.linear_orchestrator]
+command = "node"
+args = ["/Users/matiasbinagora/Projects/performance-log-capture/scripts/linear-launch.mjs", "orchestrator"]
+startup_timeout_sec = 60
+
+[mcp_servers.linear_developer]
+command = "node"
+args = ["/Users/matiasbinagora/Projects/performance-log-capture/scripts/linear-launch.mjs", "developer"]
+startup_timeout_sec = 60
+
+[mcp_servers.linear_qa]
+command = "node"
+args = ["/Users/matiasbinagora/Projects/performance-log-capture/scripts/linear-launch.mjs", "qa"]
+startup_timeout_sec = 60
+
+[mcp_servers.github_developer]
+command = "node"
+args = ["/Users/matiasbinagora/Projects/performance-log-capture/scripts/github-launch.mjs", "developer"]
+startup_timeout_sec = 60
+
+[mcp_servers.github_reviewer]
+command = "node"
+args = ["/Users/matiasbinagora/Projects/performance-log-capture/scripts/github-launch.mjs", "reviewer"]
+startup_timeout_sec = 60
+
+[mcp_servers.github_qa]
+command = "node"
+args = ["/Users/matiasbinagora/Projects/performance-log-capture/scripts/github-launch.mjs", "qa"]
+startup_timeout_sec = 60

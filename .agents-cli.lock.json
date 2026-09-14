@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "catalogVersion": "0.1.0",
+  "files": {
+    ".codex/agents/global-aws-specialist.toml": "556fad0b43999d37504be3cf0168e6521dc623d69745aefee12aea7708d8dd3e",
+    ".codex/agents/global-backend-developer.toml": "921af80061e6c1d31f4f030ec912aa0716187b2f2622b8d24cd266c90be75714",
+    ".codex/agents/global-code-reviewer.toml": "d9b7d7e7d5320e04ed333b1135a88bd8a108a529a97a6e301cd5742b03c22722",
+    ".codex/agents/global-frontend-developer.toml": "def4efa13376f158b83f49255808247f3cd534716e012c40ac2d9e1006693ddb",
+    ".codex/agents/global-orchestrator.toml": "d3b0d723e765a39c5623ef924ee253a33d7b282aa1162cd9392f0a02671c39d7",
+    ".codex/agents/global-qa-automator.toml": "971967f6939865d97c0bb66b1de0703ec3f7fb263a6591edaa1b40a4cf34ab9c",
+    ".codex/agents/global-qa-manual.toml": "358c2a17a6edbb84fc138b5ffbdd59bcb7d7ddd01d41d726c350867cc56f2c98",
+    ".codex/AGENTS.md": "2e5af27ca3c95f42383c60026a57f5f6c404c388f52e8aec190520a81c83c931",
+    ".codex/agents/manifest.json": "8092bd55ac118a7cbc1b6b4151dc226e1e6deb63c3bb1d01c8784fac01f3870f"
+  }
+}
