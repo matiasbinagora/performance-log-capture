@@ -1,9 +1,9 @@
 # Performance Log Capture
 
 This repository contains the local catalog application used by the performance
-and log-analysis demo. The current backend slice provides a deterministic
-in-memory catalog, a JSON API, Docker packaging, and a static asset seam. It
-does not require a database, credentials, or external services.
+and log-analysis demo. It provides a deterministic in-memory catalog, a JSON
+API, Docker packaging, and a small browser UI. It does not require a database,
+credentials, or external services.
 
 ## Requirements
 
@@ -112,11 +112,9 @@ the shared error shape and HTTP 404:
 Trims and normalizes the query, then returns stable product ordering for the
 same term. A missing or blank `q` returns HTTP 400 with the same error shape.
 
-## Frontend integration seam
+## Browser UI
 
-Fastify serves files from `public/` at the application root. The included
-`public/index.html` is intentionally only a backend-readiness placeholder.
-The frontend implementation can replace it with the catalog search, results,
-detail, loading, and visible error experience while calling the API through
-same-origin relative URLs. OpenSpec task `1.4` remains frontend-owned and is
-not completed by this backend slice.
+Open `http://localhost:3000` in a desktop browser. Search for a product or
+category such as `desk` or `office`, then select **View details**. The page
+uses same-origin API requests and visibly reports loading, empty, and error
+states without external services.
