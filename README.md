@@ -174,8 +174,7 @@ Each run creates `runs/<run-id>/config.json`, `requests.jsonl`,
 `application.log`, and `summary.json`. The summary records actual counts,
 operation distribution, duration, errors, latency percentiles, and
 `throughput.requestsPerSecond` (completed requests per elapsed second, rounded
-to two decimals; zero for zero requests or zero elapsed time). Each request is
-aborted after `--request-timeout-ms` (default 10000 ms); Ctrl-C marks a run
-`incomplete`; incomplete runs are never passing results. The command rejects
-unknown options before checking the application and prints the exact
-`logging-agent` handoff command when it finishes.
+aborted after `--request-timeout-ms` (default 10000 ms); Ctrl-C
+marks a run `incomplete`; incomplete runs are never passing results. The
+command rejects unknown options before checking the application and prints the
+exact `logging-agent` handoff command when it finishes.

@@ -1,10 +1,9 @@
 import { executeRun, DEFAULT_RUN_CONFIG, type RunConfig } from '../src/performance/runner.js';
 
-const config = parseArgs(process.argv.slice(2));
-const controller = new AbortController();
-process.once('SIGINT', () => { console.error('\nStop requested; finishing in-flight requests and marking the run incomplete.'); controller.abort(); });
-
 try {
+  const config = parseArgs(process.argv.slice(2));
+  const controller = new AbortController();
+  process.once('SIGINT', () => { console.error('\nStop requested; finishing in-flight requests and marking the run incomplete.'); controller.abort(); });
   const result = await executeRun(config, {
     signal: controller.signal,
     onProgress: (completed, target) => {
@@ -22,11 +21,13 @@ try {
 }
 
 function parseArgs(args: string[]): Partial<RunConfig> {
+  const knownFlags = new Set(['base-url', 'scenario', 'requests', 'concurrency', 'duration-seconds', 'ramp-seconds', 'seed', 'error-rate', 'request-timeout-ms', 'output']);
   const values = new Map<string, string>();
   for (let index = 0; index < args.length; index += 1) {
     const argument = args[index];
     if (!argument?.startsWith('--')) throw new Error(`Unexpected argument '${argument ?? ''}'.`);
     const [key, inlineValue] = argument.slice(2).split('=', 2);
+    if (!key || !knownFlags.has(key)) throw new Error(`Unknown option '--${key ?? ''}'. Supported options: ${[...knownFlags].map((flag) => `--${flag}`).join(', ')}.`);
     const value = inlineValue ?? args[++index];
     if (!key || !value) throw new Error(`Missing value for --${key ?? ''}.`);
     values.set(key, value);
@@ -41,6 +42,7 @@ function parseArgs(args: string[]): Partial<RunConfig> {
     rampSeconds: number('ramp-seconds', DEFAULT_RUN_CONFIG.rampSeconds),
     seed: number('seed', DEFAULT_RUN_CONFIG.seed),
     errorRate: number('error-rate', DEFAULT_RUN_CONFIG.errorRate),
+    requestTimeoutMs: number('request-timeout-ms', DEFAULT_RUN_CONFIG.requestTimeoutMs),
     output: values.get('output') ?? DEFAULT_RUN_CONFIG.output,
   };
 }

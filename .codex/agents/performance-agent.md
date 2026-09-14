@@ -20,10 +20,10 @@ For a bounded smoke run, use for example `--requests 20 --concurrency 4 --durati
 
 ## Stop rules and output
 
-- The runner enforces maximum requests, concurrency, duration, and a finite request timeout.
+- The runner enforces maximum requests, concurrency, duration, and a finite per-request timeout configurable with `--request-timeout-ms` (default 10000 ms). A timeout is recorded as `REQUEST_TIMEOUT`; Ctrl-C cancellation is recorded as `REQUEST_ABORTED`.
 - Press Ctrl-C to stop. In-flight requests finish, `summary.json` is written with `status: "incomplete"`, and the result is never treated as passing.
 - Every completed request is streamed to `requests.jsonl`; runner progress and failures are written to `application.log`.
-- A completed run contains `config.json`, `requests.jsonl`, `application.log`, and `summary.json`. The summary contains actual counts, operation distribution, duration, error count/rate, average, p50, p95, p99, maximum latency, and error codes.
+- A completed run contains `config.json`, `requests.jsonl`, `application.log`, and `summary.json`. The summary contains actual counts, operation distribution, duration, error count/rate, average, p50, p95, p99, maximum latency, error codes, and `throughput.requestsPerSecond` (completed requests per elapsed second; zero when no requests or no elapsed time exists). Unknown CLI options are rejected before execution.
 
 The command prints the run directory and the exact next command:
 

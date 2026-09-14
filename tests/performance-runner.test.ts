@@ -1,9 +1,10 @@
 import { promises as fs } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { describe, expect, it } from 'vitest';
 
-import { checkApplication, DEFAULT_RUN_CONFIG, executeRun, RunConfigError, validateRunConfig } from '../src/performance/runner.js';
+import { calculateThroughput, checkApplication, DEFAULT_RUN_CONFIG, executeRun, RunConfigError, validateRunConfig } from '../src/performance/runner.js';
 
 function response(status = 200): Response {
   return new Response('{}', { status, headers: { 'content-type': 'application/json' } });
@@ -21,7 +22,16 @@ describe('performance runner', () => {
     expect(validateRunConfig({
       baseUrl: 'http://127.0.0.1:3100', scenario: 'catalog', requests: 4, concurrency: 2,
       durationSeconds: 1, rampSeconds: 0, seed: 7, errorRate: 0.25, output: 'runs',
-    })).toMatchObject({ baseUrl: 'http://127.0.0.1:3100', requests: 4, concurrency: 2, seed: 7, errorRate: 0.25 });
+    })).toMatchObject({ baseUrl: 'http://127.0.0.1:3100', requests: 4, concurrency: 2, seed: 7, errorRate: 0.25, requestTimeoutMs: 10_000 });
+  });
+
+  it('supports a zero-request run with a finite serialized throughput', async () => {
+    const output = await fs.mkdtemp(join(tmpdir(), 'performance-agent-'));
+    const result = await executeRun({ output, requests: 0, durationSeconds: 1, rampSeconds: 0 }, { runId: 'empty-run', fetcher: () => Promise.resolve(response()) });
+    const serialized = JSON.parse(await fs.readFile(join(result.runDirectory, 'summary.json'), 'utf8')) as typeof result.summary;
+    expect(serialized.throughput).toEqual({ requestsPerSecond: 0 });
+    expect(Number.isFinite(serialized.throughput.requestsPerSecond)).toBe(true);
+    expect(calculateThroughput(0, 0)).toBe(0);
   });
 
   it('stops before creating a run when the application is unavailable', async () => {
@@ -52,6 +62,59 @@ describe('performance runner', () => {
     const result = await executeRun({ output, requests: 5, concurrency: 1, durationSeconds: 1, rampSeconds: 0 }, { fetcher });
     expect(result.summary.errorCount).toBeGreaterThan(0);
     expect(result.summary.errors.SEARCH_SIMULATED_ERROR).toBeGreaterThan(0);
+  });
+
+  it('aborts a hanging request at the configured timeout even with an external signal', async () => {
+    const output = await fs.mkdtemp(join(tmpdir(), 'performance-agent-'));
+    const controller = new AbortController();
+    let calls = 0;
+    const started = performance.now();
+    const result = await executeRun({ output, requests: 1, durationSeconds: 1, rampSeconds: 0, requestTimeoutMs: 25 }, {
+      signal: controller.signal,
+      fetcher: (_url, init) => {
+        calls += 1;
+        if (calls === 1) return Promise.resolve(response());
+        return new Promise<Response>((_resolve, reject) => init?.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), { once: true }));
+      },
+    });
+    expect(performance.now() - started).toBeLessThan(500);
+    expect(result.summary.errors.REQUEST_TIMEOUT).toBe(1);
+    expect(result.summary.status).toBe('complete');
+  });
+
+  it('distinguishes external cancellation from a timeout and allows later requests to succeed', async () => {
+    const output = await fs.mkdtemp(join(tmpdir(), 'performance-agent-'));
+    const controller = new AbortController();
+    let calls = 0;
+    const result = await executeRun({ output, requests: 4, concurrency: 1, durationSeconds: 1, rampSeconds: 0, requestTimeoutMs: 100 }, {
+      signal: controller.signal,
+      fetcher: (_url, init) => {
+        calls += 1;
+        if (calls === 1) return Promise.resolve(response());
+        if (calls === 2) {
+          return new Promise<Response>((_resolve, reject) => {
+            setTimeout(() => controller.abort(), 10);
+            init?.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), { once: true });
+          });
+        }
+        return Promise.resolve(response());
+      },
+    });
+    expect(result.summary.errors.REQUEST_ABORTED).toBe(1);
+    expect(result.summary.errors.REQUEST_TIMEOUT).toBeUndefined();
+    expect(result.summary.throughput.requestsPerSecond).toBeGreaterThanOrEqual(0);
+    expect(calls).toBe(2);
+  });
+
+  it('records stable throughput using the documented formula', () => {
+    expect(calculateThroughput(20, 2_000)).toBe(10);
+    expect(calculateThroughput(3, 1_000)).toBe(3);
+    expect(calculateThroughput(3, 0)).toBe(0);
+    expect(calculateThroughput(3, Number.POSITIVE_INFINITY)).toBe(0);
+  });
+
+  it('rejects unknown CLI flags before any execution', () => {
+    expect(() => execFileSync(process.execPath, ['--import', 'tsx/esm', 'scripts/performance-run.ts', '--unknown', 'value'], { cwd: process.cwd(), encoding: 'utf8', stdio: 'pipe' })).toThrow(/Unknown option '--unknown'/);
   });
 
   it('marks a signal-interrupted run incomplete', async () => {

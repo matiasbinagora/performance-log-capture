@@ -12,6 +12,7 @@ export const DEFAULT_RUN_CONFIG = {
   rampSeconds: 10,
   seed: 42,
   errorRate: 0.02,
+  requestTimeoutMs: 10_000,
   output: 'runs',
   maxRequests: 100_000,
   maxConcurrency: 200,
@@ -27,6 +28,7 @@ export interface RunConfig {
   readonly rampSeconds: number;
   readonly seed: number;
   readonly errorRate: number;
+  readonly requestTimeoutMs: number;
   readonly output: string;
   readonly maxRequests: number;
   readonly maxConcurrency: number;
@@ -54,6 +56,7 @@ export interface RunSummary {
   readonly successCount: number;
   readonly errorCount: number;
   readonly errorRate: number;
+  readonly throughput: { readonly requestsPerSecond: number };
   readonly latencyMs: { readonly average: number; readonly p50: number; readonly p95: number; readonly p99: number; readonly max: number };
   readonly errors: Record<string, number>;
   readonly generatedAt: string;
@@ -76,13 +79,14 @@ export function validateRunConfig(input: Partial<RunConfig>): RunConfig {
   const config = { ...DEFAULT_RUN_CONFIG, ...input };
   if (config.scenario !== 'catalog') throw new RunConfigError("scenario must be 'catalog'.");
   if (!/^https?:\/\/[^\s]+$/.test(config.baseUrl)) throw new RunConfigError('baseUrl must be an HTTP(S) URL.');
-  integer(config.requests, 1, config.maxRequests, 'requests');
+  integer(config.requests, 0, config.maxRequests, 'requests');
   integer(config.concurrency, 1, config.maxConcurrency, 'concurrency');
   integer(config.durationSeconds, 1, config.maxDurationSeconds, 'durationSeconds');
   integer(config.rampSeconds, 0, config.durationSeconds, 'rampSeconds');
   integer(config.maxRequests, 1, 100_000, 'maxRequests');
   integer(config.maxConcurrency, 1, 1_000, 'maxConcurrency');
   integer(config.maxDurationSeconds, 1, 3_600, 'maxDurationSeconds');
+  integer(config.requestTimeoutMs, 1, 3_600_000, 'requestTimeoutMs');
   integer(config.seed, -2_147_483_648, 2_147_483_647, 'seed');
   if (!Number.isFinite(config.errorRate) || config.errorRate < 0 || config.errorRate > 1) {
     throw new RunConfigError('errorRate must be between 0 and 1.');
@@ -141,12 +145,12 @@ export async function executeRun(
     let status = 0;
     let errorCode: string | undefined;
     try {
-      const response = await fetcher(url, { signal: options.signal ?? AbortSignal.timeout(10_000) });
+      const response = await fetchWithTimeout(fetcher, url, options.signal, config.requestTimeoutMs);
       status = response.status;
       if (!response.ok) errorCode = status === 503 ? 'SEARCH_SIMULATED_ERROR' : `HTTP_${status}`;
       await response.arrayBuffer();
     } catch (error) {
-      errorCode = error instanceof Error && error.name === 'AbortError' ? 'REQUEST_ABORTED' : 'REQUEST_FAILED';
+      errorCode = error instanceof RequestTimeoutError ? 'REQUEST_TIMEOUT' : error instanceof RequestCancelledError ? 'REQUEST_ABORTED' : 'REQUEST_FAILED';
     }
     const duration = Math.max(0, Math.round(performance.now() - requestStarted));
     const event: RequestEvent = { runId, requestId: `${runId}-${requestNumber}`, operation, status, duration, timestamp: new Date().toISOString(), ...(errorCode ? { errorCode } : {}) };
@@ -180,23 +184,58 @@ export async function executeRun(
     options.signal?.removeEventListener('abort', abort);
   }
 
+  const durationMs = Math.round(performance.now() - startedAt);
   const summary: RunSummary = {
     schemaVersion: 1,
     status: interrupted ? 'incomplete' : 'complete',
     runId,
     requestedRequests: config.requests,
     actualRequests: events.length,
-    durationMs: Math.round(performance.now() - startedAt),
+    durationMs,
     operationDistribution: operations,
     successCount: events.filter((event) => event.errorCode === undefined && event.status >= 200 && event.status < 400).length,
     errorCount: events.filter((event) => event.errorCode !== undefined || event.status >= 400).length,
     errorRate: events.length === 0 ? 0 : Number((events.filter((event) => event.errorCode !== undefined || event.status >= 400).length / events.length).toFixed(4)),
+    throughput: { requestsPerSecond: calculateThroughput(events.length, durationMs) },
     latencyMs: percentileSummary(latencies),
     errors,
     generatedAt: new Date().toISOString(),
   };
   await fs.writeFile(join(runDirectory, 'summary.json'), `${JSON.stringify(summary, null, 2)}\n`);
   return { runId, runDirectory, summary };
+}
+
+export class RequestTimeoutError extends Error {
+  constructor() { super('Request exceeded the configured timeout.'); this.name = 'RequestTimeoutError'; }
+}
+
+export class RequestCancelledError extends Error {
+  constructor() { super('Request was cancelled by the caller.'); this.name = 'RequestCancelledError'; }
+}
+
+export function calculateThroughput(requestCount: number, durationMs: number): number {
+  if (requestCount <= 0 || durationMs <= 0 || !Number.isFinite(durationMs)) return 0;
+  return Number((requestCount / (durationMs / 1_000)).toFixed(2));
+}
+
+async function fetchWithTimeout(fetcher: typeof fetch, url: string, externalSignal: AbortSignal | undefined, timeoutMs: number): Promise<Response> {
+  const controller = new AbortController();
+  let timedOut = false;
+  let cancelled = Boolean(externalSignal?.aborted);
+  const cancel = () => { cancelled = true; controller.abort(); };
+  const timer = setTimeout(() => { timedOut = true; controller.abort(); }, timeoutMs);
+  externalSignal?.addEventListener('abort', cancel, { once: true });
+  try {
+    if (cancelled) throw new RequestCancelledError();
+    return await fetcher(url, { signal: controller.signal });
+  } catch (error) {
+    if (timedOut) throw new RequestTimeoutError();
+    if (cancelled) throw new RequestCancelledError();
+    throw error;
+  } finally {
+    clearTimeout(timer);
+    externalSignal?.removeEventListener('abort', cancel);
+  }
 }
 
 async function createRunDirectory(output: string, runId: string): Promise<string> {
