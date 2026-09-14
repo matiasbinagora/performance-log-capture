@@ -148,7 +148,6 @@ export async function executeRun(
       const response = await fetchWithTimeout(fetcher, url, options.signal, config.requestTimeoutMs);
       status = response.status;
       if (!response.ok) errorCode = status === 503 ? 'SEARCH_SIMULATED_ERROR' : `HTTP_${status}`;
-      await response.arrayBuffer();
     } catch (error) {
       errorCode = error instanceof RequestTimeoutError ? 'REQUEST_TIMEOUT' : error instanceof RequestCancelledError ? 'REQUEST_ABORTED' : 'REQUEST_FAILED';
     }
@@ -227,7 +226,9 @@ async function fetchWithTimeout(fetcher: typeof fetch, url: string, externalSign
   externalSignal?.addEventListener('abort', cancel, { once: true });
   try {
     if (cancelled) throw new RequestCancelledError();
-    return await fetcher(url, { signal: controller.signal });
+    const response = await fetcher(url, { signal: controller.signal });
+    await response.arrayBuffer();
+    return response;
   } catch (error) {
     if (timedOut) throw new RequestTimeoutError();
     if (cancelled) throw new RequestCancelledError();
