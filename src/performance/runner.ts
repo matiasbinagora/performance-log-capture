@@ -241,6 +241,7 @@ async function fetchWithTimeout(fetcher: typeof fetch, url: string, externalSign
 
 async function createRunDirectory(output: string, runId: string): Promise<string> {
   const directory = join(output, runId);
+  await fs.mkdir(output, { recursive: true });
   await fs.mkdir(directory, { recursive: false }).catch((error: NodeJS.ErrnoException) => {
     if (error.code !== 'EEXIST') throw error;
     throw new RunConfigError(`Run directory already exists: ${directory}`);

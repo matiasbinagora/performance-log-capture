@@ -56,6 +56,27 @@ describe('performance runner', () => {
     expect(events.every((event) => event.runId === 'smoke-run')).toBe(true);
   });
 
+  it('creates nested output paths and preserves artifacts across unique runs', async () => {
+    const root = await fs.mkdtemp(join(tmpdir(), 'performance-agent-clean-'));
+    const output = join(root, 'missing', 'nested', 'runs');
+    const fetcher = () => Promise.resolve(response());
+
+    const first = await executeRun({ output, requests: 1, concurrency: 1, durationSeconds: 1, rampSeconds: 0 }, { fetcher });
+    const second = await executeRun({ output, requests: 1, concurrency: 1, durationSeconds: 1, rampSeconds: 0 }, { fetcher });
+
+    expect(first.summary.status).toBe('complete');
+    expect(second.summary.status).toBe('complete');
+    expect(first.runId).not.toBe(second.runId);
+    for (const result of [first, second]) {
+      expect((await fs.stat(result.runDirectory)).isDirectory()).toBe(true);
+      expect((await fs.readdir(result.runDirectory)).sort()).toEqual(['application.log', 'config.json', 'requests.jsonl', 'summary.json']);
+      const summary = JSON.parse(await fs.readFile(join(result.runDirectory, 'summary.json'), 'utf8')) as typeof result.summary;
+      expect(summary).toMatchObject({ status: 'complete', runId: result.runId, requestedRequests: 1, actualRequests: 1 });
+      expect(typeof summary.throughput.requestsPerSecond).toBe('number');
+      expect(Number.isFinite(summary.throughput.requestsPerSecond)).toBe(true);
+    }
+  });
+
   it('records deterministic simulated failures from the PER-25 response contract', async () => {
     const output = await fs.mkdtemp(join(tmpdir(), 'performance-agent-'));
     const fetcher = (url: string | URL | Request) => Promise.resolve(isSearch(url) ? response(503) : response());
