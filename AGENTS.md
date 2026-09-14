@@ -77,3 +77,19 @@ description, comments, labels, status, relations and acceptance criteria.
 After every task work session, add a comment or review note to the same issue
 or pull request describing the work, outcome, evidence and next step.
 If the assigned connection is unavailable, stop and report `IDENTITY NOT VERIFIED`.
+
+## GitHub App identity verification
+
+The GitHub MCP connections use short-lived GitHub App installation tokens, not
+human user tokens. Therefore `github_reviewer.get_me`, `get_user`,
+`get_authenticated_user`, and direct `GET /user` checks are not valid identity
+checks and must not be used as a prerequisite; GitHub may return 401 or 403 for
+those endpoints even when the App is correctly configured.
+
+For GitHub identity verification, use the configured role-specific launcher and
+the project-root `.env`, then verify the App installation through successful
+access to the assigned repository, target branch/commit, pull request, and the
+required review or comment operation. The expected reviewer App is
+`matias-code-reviewer-agent`, installed for `matiasbinagora`. If those checks
+succeed, the App identity is verified. Do not substitute `gh`, a PAT, or a
+human GitHub account.
