@@ -146,3 +146,36 @@ Every completed request emits one JSON object per line to standard output with
 `duration`, ISO `timestamp`, and `errorCode` when applicable. Search failures
 return HTTP 503 with `SEARCH_SIMULATED_ERROR`. These events can be redirected
 to a file for a future performance run without a database or external service.
+
+## Performance agent
+
+The bounded performance runner invokes the catalog endpoints and writes isolated
+machine-readable evidence under a new run directory. When using the PER-25
+branch, start the app with the same scenario settings as the runner, for
+example:
+
+```bash
+SEARCH_DELAY_MS=250 SEARCH_ERROR_RATE=0.02 RANDOM_SEED=42 RUN_ID=demo npm run dev
+```
+
+Run the default 60-second/20,000-request profile with:
+
+```bash
+npm run performance:run -- --base-url http://localhost:3000 --scenario catalog --requests 20000 --concurrency 20 --duration-seconds 60 --ramp-seconds 10 --seed 42 --error-rate 0.02 --output runs
+```
+
+Use a small bounded profile while developing:
+
+```bash
+npm run performance:run -- --base-url http://localhost:3000 --requests 20 --concurrency 4 --duration-seconds 10 --ramp-seconds 1 --output runs
+```
+
+Each run creates `runs/<run-id>/config.json`, `requests.jsonl`,
+`application.log`, and `summary.json`. The summary records actual counts,
+operation distribution, duration, errors, latency percentiles, and
+`throughput.requestsPerSecond` (completed requests per elapsed second, rounded
+to two decimals; zero for zero requests or zero elapsed time). Each request is
+aborted after `--request-timeout-ms` (default 10000 ms); Ctrl-C marks a run
+`incomplete`; incomplete runs are never passing results. The command rejects
+unknown options before checking the application and prints the exact
+`logging-agent` handoff command when it finishes.
