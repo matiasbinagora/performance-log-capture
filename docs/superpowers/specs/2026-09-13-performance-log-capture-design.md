@@ -37,6 +37,26 @@ turn a large set of logs into an understandable diagnosis.
 - Performance and logging agents are local Codex agents and do not use Linear
   or GitHub.
 
+## Delivery workflow
+
+Stories use this sequence:
+
+`Backlog → Planned → In Progress → Under Review → QA verification → Ready to Release → Done`
+
+The orchestrator recommends a story for `Planned`. Once the user approves that
+recommendation, the backend developer is activated and moves the story to
+`In Progress`. The developer moves it to `Under Review` after implementation.
+The code reviewer validates the implementation, leaves factual comments on the
+GitHub pull request, and moves an approved story to `QA verification`. QA
+automation adds or updates tests, runs the acceptance checks, records the video
+evidence, and moves a passing story to `Ready to Release`. The user performs
+the final review, moves the story to `Done`, and merges the GitHub pull request
+manually.
+
+The automatic transitions are allowed only when the preceding role has
+provided its required evidence. No agent may move a story to `Done` or merge a
+pull request.
+
 ## Story execution contract
 
 Every developer story must leave the repository runnable, include tests for
