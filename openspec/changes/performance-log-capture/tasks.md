@@ -59,14 +59,14 @@
 
 ## 7. Playwright QA and video evidence — PER-30
 
-- [ ] 7.1 Configure Playwright against the Dockerized application and standalone dashboard.
-- [ ] 7.2 Add tests for catalog load, search success, product detail, simulated search error, and dashboard opening.
-- [ ] 7.3 Add a test for incomplete-report messaging and offline report rendering.
-- [ ] 7.4 Configure video recording and capture commit, browser, command, and result metadata.
-- [ ] 7.5 Implement or document uploading the video for playback inside the GitHub PR/issue.
-- [ ] 7.6 Implement or document attaching the same video for playback inside the Linear task.
-- [ ] 7.7 Publish English QA evidence through `github_qa` and `linear_qa`; keep videos out of Git history.
-- [ ] 7.8 Verify a failing test blocks a passing QA report and a passing run opens from both platforms.
+- [x] 7.1 Configure Playwright against the Dockerized application and standalone dashboard.
+- [x] 7.2 Add tests for catalog load, search success, product detail, simulated search error, and dashboard opening.
+- [x] 7.3 Add a test for incomplete-report messaging and offline report rendering.
+- [x] 7.4 Configure video recording and capture commit, browser, command, and result metadata.
+- [x] 7.5 Implement or document uploading the video for playback inside the GitHub PR/issue.
+- [x] 7.6 Implement or document attaching the same video for playback inside the Linear task.
+- [x] 7.7 Publish English QA evidence through `github_qa` and `linear_qa`; keep videos out of Git history.
+- [x] 7.8 Verify a failing test blocks a passing QA report and a passing run opens from both platforms.
 
 ## 8. Archify documentation — PER-31
 

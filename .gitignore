@@ -8,4 +8,7 @@ dist/
 coverage/
 npm-debug.log*
 test-results/
+playwright-report/
+playwright-artifacts/
+public/.qa-fixtures/
 runs/

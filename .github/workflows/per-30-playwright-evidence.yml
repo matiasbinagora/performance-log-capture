@@ -1,0 +1,51 @@
+name: PER-30 Playwright evidence
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  playwright:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CI: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run build
+      - run: node scripts/prepare-playwright-fixture.mjs
+      - run: docker compose up --build -d
+      - run: |
+          curl --fail --retry 20 --retry-delay 1 http://127.0.0.1:3000/health
+      - name: Run Playwright and write metadata
+        env:
+          PLAYWRIGHT_EXTERNAL_SERVER: true
+          PLAYWRIGHT_COMMAND: npm run test:e2e
+        run: |
+          node scripts/write-playwright-metadata.mjs pending
+          set +e
+          npm run test:e2e
+          status=$?
+          node scripts/write-playwright-metadata.mjs "$status"
+          exit "$status"
+      - if: always()
+        run: docker compose down
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: PER-30-playwright-evidence-${{ github.sha }}
+          path: |
+            playwright-report/
+            test-results/
+            playwright-artifacts/
+          if-no-files-found: warn
+          retention-days: 14
