@@ -8,13 +8,14 @@
   },
   "scripts": {
     "dev": "tsx watch src/server.ts",
-    "lint": "eslint src tests vitest.config.ts",
+    "lint": "eslint src tests vitest.config.ts scripts/performance-dashboard.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "build": "tsc -p tsconfig.build.json",
     "start": "node dist/server.js",
-    "openspec:validate": "openspec validate performance-log-capture --strict"
+    "openspec:validate": "openspec validate performance-log-capture --strict",
+    "dashboard:generate": "tsx scripts/performance-dashboard.ts"
   },
   "dependencies": {
     "@fastify/static": "^10.1.3",
