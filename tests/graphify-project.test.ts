@@ -1,8 +1,8 @@
-import { spawnSync } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { isLikelyRouteToken, sanitizeContent, sanitizeStructuredValue } from "../scripts/graphify-project.mjs";
 
 const root = process.cwd();
 const script = join(root, "scripts/graphify-project.mjs");
@@ -14,6 +14,41 @@ function run(command: string, cwd = root, env: NodeJS.ProcessEnv = {}) {
 }
 
 describe("Graphify project integration", () => {
+  it("classifies route provenance without weakening absolute-path protection", () => {
+    const routeContent = [
+      "GET /products/:id",
+      "/products/:id",
+      "GET /api/users",
+      "/api/users",
+      "/health",
+      "/metrics",
+      "/files/{id}",
+      "/assets/*",
+      "/assets/**",
+      "https://example.com/api/users",
+      "src/app.ts",
+    ].join(" ");
+    const sanitized = sanitizeContent(routeContent, root);
+    expect(sanitized).toContain("GET /products/:id");
+    expect(sanitized).toContain("/products/:id");
+    expect(sanitized).toContain("GET /api/users");
+    expect(sanitized).toContain("/api/users");
+    expect(sanitized).toContain("/health");
+    expect(sanitized).toContain("/metrics");
+    expect(sanitized).toContain("/files/{id}");
+    expect(sanitized).toContain("/assets/*");
+    expect(sanitized).toContain("/assets/**");
+    expect(sanitized).toContain("https://example.com/api/users");
+    expect(sanitized).toContain("src/app.ts");
+    expect(sanitized).not.toContain("/srv/app/config");
+    expect(sanitized).not.toContain("/mnt/build/output");
+    expect(sanitized).not.toContain("/opt/service/data");
+    expect(isLikelyRouteToken("/products/:id")).toBe(true);
+    expect(isLikelyRouteToken("/assets/**")).toBe(true);
+    expect(isLikelyRouteToken("/srv/app/config")).toBe(false);
+    expect(sanitizeStructuredValue("/products/:id", "route", root)).toBe("/products/:id");
+  });
+
   it("builds a repeatable protected context index when Graphify is available", () => {
     const result = run("index");
     if (result.status !== 0 && result.stderr.includes("Graphify is unavailable")) return;
@@ -41,7 +76,7 @@ describe("Graphify project integration", () => {
       writeFileSync(join(fixture, ".codex/agents/config.toml"), `args = ["/Users/alice/project/scripts/launch.mjs"]\nremote = "https://private.example.test/api"\napi_key = "${fixtureSecret}"\n`);
       writeFileSync(join(fixture, "openspec/changes/tasks.md"), "Search acceptance criteria\n");
       writeFileSync(join(fixture, "src.ts"), "const outside = /private/other-machine/file; const extless = /srv/app/config /mnt/build/output /opt/service/data; const traversal = ../outside;\n");
-      writeFileSync(join(fixture, "routes.ts"), "GET /products/:id GET /api/users GET /health https://example.test/api/users src/app.ts\n");
+      writeFileSync(join(fixture, "routes.ts"), "GET /products/:id /products/:id GET /api/users /api/users /health /metrics /files/{id} /assets/* https://example.test/api/users src/app.ts\n");
       writeFileSync(join(fixture, ".env"), `API_KEY=${protectedValue}\n`);
       writeFileSync(join(fixture, "client-secret.ts"), `PRIVATE_KEY=${protectedValue}\n`);
       writeFileSync(fakeGraphify, "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then echo 0.0-test; exit 0; fi\nmkdir -p graphify-out\nprintf '{\"nodes\":[],\"edges\":[]}' > graphify-out/graph.json\n");
@@ -55,6 +90,9 @@ describe("Graphify project integration", () => {
       expect(serialized).toContain("/products/:id");
       expect(serialized).toContain("/api/users");
       expect(serialized).toContain("/health");
+      expect(serialized).toContain("/metrics");
+      expect(serialized).toContain("/files/{id}");
+      expect(serialized).toContain("/assets/*");
       expect(serialized).toContain("https://example.test/api/users");
       expect(serialized).toContain("src/app.ts");
       expect(serialized).not.toMatch(/\/Users\//);

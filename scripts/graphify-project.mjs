@@ -82,6 +82,27 @@ function sanitizeStructuredValue(value, provenance, root) {
   return sanitizeContent(value, root);
 }
 
+// Free-form text has no reliable provenance. Preserve only route-shaped tokens
+// with positive endpoint evidence; ambiguous slash-prefixed values still use
+// the filesystem-safe redaction path. This intentionally does not treat every
+// lowercase multi-segment path as a route, because /srv/app/config is just as
+// plausible a machine path as it is an endpoint.
+function isLikelyRouteToken(pathToken) {
+  if (!pathToken.startsWith("/")) return false;
+  if (/^\/(?:api(?:\/|$)|health(?:z)?(?:\/|$)|metrics(?:\/|$)|ready(?:z)?(?:\/|$)|live(?:z)?(?:\/|$)|status(?:\/|$)|graphql(?:\/|$)|v\d+(?:\/|$))/i.test(pathToken)) return true;
+  if (/(?:^|\/)[:][A-Za-z][A-Za-z0-9_-]*(?:[?*])?(?:\/|$)/.test(pathToken)) return true;
+  if (/(?:^|\/)(?:\*{1,2}|\{[A-Za-z][A-Za-z0-9_-]*\})(?:\/|$)/.test(pathToken)) return true;
+  return false;
+}
+
+function preserveRouteToken(pathToken, routes) {
+  const trailing = pathToken.match(/[),.;]}]+$/)?.[0] || "";
+  const candidate = trailing ? pathToken.slice(0, -trailing.length) : pathToken;
+  if (!isLikelyRouteToken(candidate)) return null;
+  routes.push(candidate);
+  return `__GRAPHIFY_ROUTE_${routes.length - 1}__${trailing}`;
+}
+
 function sanitizeContent(content, root) {
   let sanitized = content.replace(/-----BEGIN [^-]+-----[\s\S]*?-----END [^-]+-----/g, "[private-key-redacted]");
   sanitized = sanitized.replace(/((?:api[_-]?key|token|password|secret|credential|private[_-]?key)\s*[:=]\s*)(?:\\?"(?:\\.|[^"\\])*\\?"|\\?'(?:\\.|[^'\\])*\\?'|[^\s,;}'"]+)/gi, "$1[redacted]");
@@ -92,9 +113,14 @@ function sanitizeContent(content, root) {
   });
   const routes = [];
   sanitized = sanitized.replace(/\b(?:GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS|TRACE)\s+(\/[^\s"'<>]+)/gi, (match, route) => {
+    const preserved = preserveRouteToken(route, routes);
+    if (!preserved) return match;
     const start = match.indexOf(route);
-    routes.push(route);
-    return `${match.slice(0, start)}__GRAPHIFY_ROUTE_${routes.length - 1}__`;
+    return `${match.slice(0, start)}${preserved}`;
+  });
+  sanitized = sanitized.replace(/(^|[\s"'(=,:])(\/[^\s"'<>]+)/g, (match, prefix, route) => {
+    const preserved = preserveRouteToken(route, routes);
+    return preserved ? `${prefix}${preserved}` : match;
   });
   sanitized = sanitized.replace(/(^|[\s"'(=,:])((?:~[\\/]|\$HOME[\\/]|\$\{HOME\}[\\/]|[A-Za-z]:[\\/]|\/)[^\s"'<>\/][^\s"'<>]*)/g, (match, prefix, pathToken) => `${prefix}${sanitizePath(pathToken, root)}`);
   sanitized = sanitized.replace(/(?:\.\.\/|\.\.\\)+/g, "[traversal-path-redacted]");
@@ -250,4 +276,5 @@ if (resolve(process.argv[1] || "") === fileURLToPath(import.meta.url)) {
   else fail("usage: graphify-project.mjs index | search <query> | inspect");
 }
 
-export { safeRelativePath, sanitizeContent, sanitizeStructuredValue };
+export { isLikelyRouteToken, safeRelativePath, sanitizeContent, sanitizeStructuredValue };
+import { spawnSync } from "node:child_process";
