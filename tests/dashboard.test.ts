@@ -88,4 +88,48 @@ describe('standalone dashboard', () => {
     expect(firstHtml).not.toMatch(/https?:\/\//);
     expect(firstHtml).not.toContain('<script src=');
   });
+  it('distinguishes missing, null, invalid, zero and positive error counts', () => {
+    const observation = (errorCount: unknown, include = true) => ({
+      ...fixture,
+      metrics: {
+        ...(fixture.metrics as Record<string, unknown>),
+        timeSeries: [include ? { timestamp: '2026-09-14T00:00:00.000Z', latencyMs: 0, ...(errorCount === undefined ? {} : { errorCount }) } : { timestamp: '2026-09-14T00:00:00.000Z', latencyMs: 0 }],
+      },
+    });
+    expect(validateAnalysis(observation(undefined, false)).status).toBe('complete');
+    expect(validateAnalysis(observation(null)).status).toBe('invalid');
+    expect(validateAnalysis(observation('1')).status).toBe('invalid');
+    expect(validateAnalysis(observation(0)).status).toBe('complete');
+    expect(validateAnalysis(observation(2)).status).toBe('complete');
+
+    expect(renderDashboard(observation(undefined, false) as unknown as DashboardAnalysis)).toContain('Unavailable');
+    expect(renderDashboard(observation(0) as unknown as DashboardAnalysis)).toContain('0');
+  });
+
+  it('enforces deterministic zero-request error-rate semantics and unavailable operations', () => {
+    const zeroReport = (errorRate: unknown) => ({
+      ...fixture,
+      status: 'incomplete',
+      derivedFindings: [],
+      hypotheses: [],
+      facts: { ...(fixture.facts as Record<string, unknown>), requestCount: 0, successCount: 0, failureCount: 0, errorRate, statusCodes: {}, errors: {}, interrupted: false },
+      metrics: {
+        ...(fixture.metrics as Record<string, unknown>),
+        overall: { ...((fixture.metrics as Record<string, unknown>).overall as object), requestCount: 0, successCount: 0, failureCount: 0, errorRate, statusCodes: {}, errors: {}, throughputRequestsPerSecond: 0 },
+        byOperation: {},
+        timeSeries: [{ timestamp: '2026-09-14T00:00:00.000Z', latencyMs: 0 }],
+      },
+    });
+    expect(validateAnalysis(zeroReport(0)).status).toBe('incomplete');
+    expect(validateAnalysis(zeroReport(0.5)).issues.map((issue) => issue.code)).toContain('INCONSISTENT_METRIC');
+
+    const missingOperations = { ...fixture, metrics: { ...(fixture.metrics as Record<string, unknown>), byOperation: { health: ((fixture.metrics as Record<string, unknown>).byOperation as Record<string, unknown>).health } } };
+    const html = renderDashboard(missingOperations as unknown as DashboardAnalysis);
+    expect(html).toContain('unavailable-label');
+    expect(html).toContain('Unavailable');
+    expect(html).toContain("['detail','search']");
+  });
+
 });
+
+
