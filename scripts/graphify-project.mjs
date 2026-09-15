@@ -277,4 +277,3 @@ if (resolve(process.argv[1] || "") === fileURLToPath(import.meta.url)) {
 }
 
 export { isLikelyRouteToken, safeRelativePath, sanitizeContent, sanitizeStructuredValue };
-import { spawnSync } from "node:child_process";
