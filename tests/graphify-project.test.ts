@@ -40,7 +40,7 @@ describe("Graphify project integration", () => {
       const protectedValue = ["should", "not-be-indexed"].join("-");
       writeFileSync(join(fixture, ".codex/agents/config.toml"), `args = ["/Users/alice/project/scripts/launch.mjs"]\nremote = "https://private.example.test/api"\napi_key = "${fixtureSecret}"\n`);
       writeFileSync(join(fixture, "openspec/changes/tasks.md"), "Search acceptance criteria\n");
-      writeFileSync(join(fixture, "src.ts"), "const outside = /private/other-machine/file; const traversal = ../outside;\n");
+      writeFileSync(join(fixture, "src.ts"), "const outside = /private/other-machine/file; const extless = /srv/app/config /mnt/build/output /opt/service/data; const traversal = ../outside;\n");
       writeFileSync(join(fixture, "routes.ts"), "GET /products/:id GET /api/users GET /health https://example.test/api/users src/app.ts\n");
       writeFileSync(join(fixture, ".env"), `API_KEY=${protectedValue}\n`);
       writeFileSync(join(fixture, "client-secret.ts"), `PRIVATE_KEY=${protectedValue}\n`);
@@ -58,6 +58,7 @@ describe("Graphify project integration", () => {
       expect(serialized).toContain("https://example.test/api/users");
       expect(serialized).toContain("src/app.ts");
       expect(serialized).not.toMatch(/\/Users\//);
+      expect(serialized).not.toMatch(/\/srv\/|\/mnt\/|\/opt\/|\/private\//);
       expect(serialized).toContain("https://private.example.test/api");
       expect(serialized).not.toContain(protectedValue);
       expect(serialized).not.toContain(fixtureSecret);
