@@ -8,9 +8,10 @@
   },
   "scripts": {
     "dev": "tsx watch src/server.ts",
-    "lint": "eslint src tests vitest.config.ts",
+    "lint": "eslint src scripts/performance-run.ts tests vitest.config.ts",
     "test": "vitest run",
     "test:watch": "vitest",
+    "performance:run": "tsx scripts/performance-run.ts",
     "typecheck": "tsc --noEmit",
     "build": "tsc -p tsconfig.build.json",
     "start": "node dist/server.js",
