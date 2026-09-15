@@ -53,9 +53,9 @@ The logging workflow can save the complete command output as evidence, for
 example:
 
 ```bash
-mkdir -p /tmp/performance-log-capture-evidence
+mkdir -p graphify-out/evidence
 npm run graphify:search -- "search handler intentional delay error" \
-  | tee /tmp/performance-log-capture-evidence/graphify-search.txt
+  | tee graphify-out/evidence/graphify-search.txt
 ```
 
 This evidence links the measured slow-search observation to source locations;
@@ -73,3 +73,21 @@ use an LLM backend. This integration deliberately does not require credentials
 or network access at runtime, so document lookup uses the deterministic
 companion index while the Graphify graph remains AST-based. No generated graph
 files are committed.
+
+## Route and filesystem classification
+
+The sanitizer accepts explicit `filePath`, `route`, `url`, and `content`
+provenance. File paths must resolve inside the repository; outside absolute
+paths and traversal are redacted. HTTP methods provide route context. In
+free-form text, parameters (`:id`, `{id}`), wildcard segments, API/version
+namespaces, and conventional service endpoints provide route evidence.
+Unrecognized slash-prefixed literals remain redacted: arbitrary filesystem
+roots cannot safely be inferred to be routes. Known filesystem roots and
+protected segments take precedence over route evidence.
+
+Markdown backticks, fenced code, and link punctuation delimit tokens; balanced
+parameter braces remain part of the route. URL credentials and sensitive query
+values are redacted. Classification runs before writing the companion index
+and when forwarding Graphify output. This heuristic cannot distinguish an
+unmarked endpoint from an identically spelled filesystem path; use explicit
+route provenance or method context for otherwise ambiguous route names.
