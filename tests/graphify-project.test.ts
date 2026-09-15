@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 const root = process.cwd();
 const script = join(root, "scripts/graphify-project.mjs");
 type ContextIndex = { files: Array<{ path: string }> };
+const unsafePathPatterns = [/\/Users\//, /\/private\//, /\/var\//, /\$HOME(?:\/|$)/, /[A-Za-z]:[\\/]/, /\.\.\//];
 
 function run(command: string, cwd = root, env: NodeJS.ProcessEnv = {}) {
   return spawnSync(process.execPath, [script, ...command.split(" ")], { cwd, env: { ...process.env, ...env }, encoding: "utf8" });
@@ -23,9 +24,75 @@ describe("Graphify project integration", () => {
     expect(parsed.files.some((file: { path: string }) => file.path === "AGENTS.md")).toBe(true);
     expect(parsed.files.some((file: { path: string }) => file.path.includes("openspec/"))).toBe(true);
     expect(parsed.files.every((file: { path: string }) => !file.path.includes(".env"))).toBe(true);
+    expect(parsed.files.every((file: { path: string }) => !unsafePathPatterns.some((pattern) => pattern.test(file.path)))).toBe(true);
     const second = readFileSync(index, "utf8");
     expect(run("index").status).toBe(0);
     expect(readFileSync(index, "utf8")).toBe(second);
+  });
+
+  it("sanitizes absolute, traversal, secret, and host-like content before writing or searching", () => {
+    const fixture = mkdtempSync(join(tmpdir(), "graphify-safe-"));
+    const fakeGraphify = join(fixture, "fake-graphify");
+    try {
+      mkdirSync(join(fixture, ".codex/agents"), { recursive: true });
+      mkdirSync(join(fixture, "openspec/changes"), { recursive: true });
+      writeFileSync(join(fixture, ".codex/agents/config.toml"), 'args = ["/Users/alice/project/scripts/launch.mjs"]\nremote = "https://private.example.test/api"\napi_key = "not-a-real-key"\n');
+      writeFileSync(join(fixture, "openspec/changes/tasks.md"), "Search acceptance criteria\n");
+      writeFileSync(join(fixture, "src.ts"), "const outside = /private/other-machine/file; const traversal = ../outside;\n");
+      writeFileSync(join(fixture, ".env"), "API_KEY=should-not-be-indexed\n");
+      writeFileSync(join(fixture, "client-secret.ts"), "PRIVATE_KEY=should-not-be-indexed\n");
+      writeFileSync(fakeGraphify, "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then echo 0.0-test; exit 0; fi\nmkdir -p graphify-out\nprintf '{\"nodes\":[],\"edges\":[]}' > graphify-out/graph.json\n");
+      chmodSync(fakeGraphify, 0o755);
+      const env = { GRAPHIFY_BIN: fakeGraphify };
+      const indexed = run("index", fixture, env);
+      expect(indexed.status).toBe(0);
+      const index = JSON.parse(readFileSync(join(fixture, "graphify-out/context-index.json"), "utf8")) as ContextIndex & { diagnostics: unknown[]; files: Array<{ path: string; content: string }> };
+      expect(index.files.map((file) => file.path)).toEqual([".codex/agents/config.toml", "openspec/changes/tasks.md", "src.ts"]);
+      const serialized = JSON.stringify(index);
+      expect(serialized).not.toMatch(/\/Users\//);
+      expect(serialized).not.toMatch(/private\.example\.test/);
+      expect(serialized).not.toMatch(/should-not-be-indexed|not-a-real-key/);
+      expect(serialized).not.toMatch(/\.\.\//);
+      expect(index.diagnostics).toEqual([]);
+      const searched = run("search acceptance", fixture, env);
+      expect(searched.status).toBe(0);
+      expect(searched.stdout).toContain("openspec/changes/tasks.md");
+      expect(`${searched.stdout}\n${searched.stderr}`).not.toMatch(/\/Users\/|\/private\/|\/var\/|\$HOME|\.\.\//);
+      expect(`${searched.stdout}\n${searched.stderr}`).not.toMatch(/not-a-real-key|should-not-be-indexed|private\.example\.test/);
+    } finally {
+      rmSync(fixture, { recursive: true, force: true });
+    }
+  });
+
+  it("does not preserve prefix or traversal paths in indexed content", () => {
+    const fixture = mkdtempSync(join(tmpdir(), "graphify-boundary-"));
+    const fakeGraphify = join(fixture, "fake-graphify");
+    try {
+      writeFileSync(join(fixture, "boundary.md"), 'inside="/repo/project/src/app.ts" prefix="/repo/project-other/app.ts" traversal="/repo/project/../outside.ts"\n');
+      writeFileSync(fakeGraphify, "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then echo 0.0-test; exit 0; fi\nmkdir -p graphify-out\nprintf '{\"nodes\":[],\"edges\":[]}' > graphify-out/graph.json\n");
+      chmodSync(fakeGraphify, 0o755);
+      const result = run("index", fixture, { GRAPHIFY_BIN: fakeGraphify });
+      expect(result.status).toBe(0);
+      const index = readFileSync(join(fixture, "graphify-out/context-index.json"), "utf8");
+      expect(index).toContain("[absolute-path-redacted]");
+      expect(index).not.toContain("/repo/project");
+      expect(index).not.toContain("../");
+    } finally {
+      rmSync(fixture, { recursive: true, force: true });
+    }
+  });
+
+  it("excludes protected paths and keeps generation deterministic", () => {
+    const result = run("index");
+    if (result.status !== 0 && result.stderr.includes("Graphify is unavailable")) return;
+    expect(result.status).toBe(0);
+    const index = join(root, "graphify-out/context-index.json");
+    const first = readFileSync(index, "utf8");
+    const secondResult = run("index");
+    expect(secondResult.status).toBe(0);
+    expect(readFileSync(index, "utf8")).toBe(first);
+    const parsed = JSON.parse(first) as ContextIndex;
+    expect(parsed.files.every((file) => !/(^|\/)\.env(?:\.|$)|(^|\/)(?:node_modules|\.git|\.worktrees|graphify-out)(\/|$)|secret|credential|token|password/i.test(file.path))).toBe(true);
   });
 
   it("searches source and OpenSpec/documentation context", () => {
