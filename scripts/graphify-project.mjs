@@ -75,33 +75,52 @@ function sanitizeFilePath(filePath, root) {
   return relativePath || "[relative-path-redacted]";
 }
 
+// A leading slash alone cannot distinguish a route from a filesystem path.
+// Explicit route provenance or an HTTP method permits any safe route grammar.
+// Free text needs positive endpoint evidence: parameter/wildcard segments,
+// a versioned API namespace, or conventional service endpoint names. Unknown
+// literal paths remain redacted. Filesystem roots and protected/traversal
+// segments take precedence, even when an HTTP method precedes the token.
+function isSafeRoute(value) {
+  value = value.split("?", 1)[0];
+  if (!/^\/(?:[A-Za-z0-9_-]+|:[A-Za-z][A-Za-z0-9_-]*|\{[A-Za-z][A-Za-z0-9_-]*\}|\*{1,2})(?:\/(?:[A-Za-z0-9_-]+|:[A-Za-z][A-Za-z0-9_-]*|\{[A-Za-z][A-Za-z0-9_-]*\}|\*{1,2}))*\/?$/.test(value)) return false;
+  if (/^\/(?:Users|private|var|tmp|srv|mnt|opt|home|etc|usr|root|Volumes|proc|sys|dev|run|bin|sbin|lib)(?:\/|$)/i.test(value)) return false;
+  return !value.split("/").some((part) => EXCLUDED_DIRS.has(part) || isExcluded(part));
+}
+
+function isLikelyRouteToken(value) {
+  if (!isSafeRoute(value)) return false;
+  return /(?:^|\/)(?::[A-Za-z][A-Za-z0-9_-]*|\{[A-Za-z][A-Za-z0-9_-]*\}|\*{1,2})(?:\/|$)/.test(value)
+    || /^\/(?:api|v\d+|healthz?|metrics|readyz?|livez?|status|graphql)(?:\/|$)/i.test(value);
+}
+
 function sanitizeStructuredValue(value, provenance, root) {
   if (provenance === "filePath") return sanitizeFilePath(value, root);
-  if (provenance === "route") return value;
+  if (provenance === "route") return isSafeRoute(value) ? sanitizeUrl(value) : sanitizeContent(value, root);
   if (provenance === "url") return sanitizeUrl(value);
   return sanitizeContent(value, root);
 }
 
-<<<<<<< HEAD
 function sanitizeContent(content, root) {
   let sanitized = content.replace(/-----BEGIN [^-]+-----[\s\S]*?-----END [^-]+-----/g, "[private-key-redacted]");
   sanitized = sanitized.replace(/((?:api[_-]?key|token|password|secret|credential|private[_-]?key)\s*[:=]\s*)(?:\\?"(?:\\.|[^"\\])*\\?"|\\?'(?:\\.|[^'\\])*\\?'|[^\s,;}'"]+)/gi, "$1[redacted]");
-  const urls = [];
-  sanitized = sanitized.replace(/\b(?:https?|ssh|git):\/\/[^\s"'<>]+/gi, (url) => {
-    const index = urls.push(sanitizeUrl(url)) - 1;
-    return `__GRAPHIFY_URL_${index}__`;
+  // Match URL, route and filesystem candidates together: preserved values never
+  // pass through a second replacement, and input cannot forge placeholders.
+  // Backticks and Markdown link delimiters are boundaries, not token content.
+  const tokens = /\b(?:https?|ssh|git):\/\/[^\s"'`<>\[\](),;]+|(^|[\s"'`(=,:\[>])((?:~[\\/]|\$HOME[\\/]|\$\{HOME\}[\\/]|[A-Za-z]:[\\/]|\/)[^\s"'`<>\[\](),;]*)/g;
+  sanitized = sanitized.replace(tokens, (match, prefix, token, offset, input) => {
+    if (token === undefined) return sanitizeUrl(match);
+    // Preserve a balanced {parameter}; remove only prose punctuation.
+    let value = token.replace(/\.+$/, "");
+    while (value.endsWith("}") && (value.match(/}/g)?.length || 0) > (value.match(/{/g)?.length || 0)) value = value.slice(0, -1);
+    const suffix = token.slice(value.length);
+    if (/(?:^|[\\/])\.\.(?:[\\/]|$)/.test(value)) return `${prefix}[traversal-path-redacted]${suffix}`;
+    const method = /\b(?:GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS|TRACE)\s*$/i.test(input.slice(0, offset + prefix.length));
+    if ((method && isSafeRoute(value)) || isLikelyRouteToken(value)) return `${prefix}${sanitizeUrl(value)}${suffix}`;
+    return `${prefix}${sanitizePath(value, root)}${suffix}`;
   });
-  const routes = [];
-  sanitized = sanitized.replace(/\b(?:GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS|TRACE)\s+(\/[^\s"'<>]+)/gi, (match, route) => {
-    const start = match.indexOf(route);
-    routes.push(route);
-    return `${match.slice(0, start)}__GRAPHIFY_ROUTE_${routes.length - 1}__`;
-  });
-  sanitized = sanitized.replace(/(^|[\s"'(=,:])((?:~[\\/]|\$HOME[\\/]|\$\{HOME\}[\\/]|[A-Za-z]:[\\/]|\/)[^\s"'<>\/][^\s"'<>]*)/g, (match, prefix, pathToken) => `${prefix}${sanitizePath(pathToken, root)}`);
   sanitized = sanitized.replace(/(?:\.\.\/|\.\.\\)+/g, "[traversal-path-redacted]");
   sanitized = sanitized.replace(/\$\\?\{?HOME\\?\}?/gi, "[home-variable-redacted]");
-  sanitized = sanitized.replace(/__GRAPHIFY_URL_(\d+)__/g, (_, index) => urls[Number(index)]);
-  sanitized = sanitized.replace(/__GRAPHIFY_ROUTE_(\d+)__/g, (_, index) => routes[Number(index)]);
   return sanitized;
 }
 
@@ -211,7 +230,7 @@ function search(root, query) {
     const lineNumber = line === undefined ? 1 : file.content.slice(0, line).split(/\r?\n/).length;
     return { file, score, lineNumber };
   }).filter((match) => match.score > 0).sort((a, b) => b.score - a.score || a.file.path.localeCompare(b.file.path));
-  console.log(`Query: ${query}`);
+  console.log(`Query: ${sanitizeContent(query, root)}`);
   console.log(`Graphify graph: ${displayPath(root, graph)}`);
   console.log(`Context matches: ${matches.length}`);
   for (const { file, score, lineNumber } of matches.slice(0, 10)) {
@@ -251,202 +270,5 @@ if (resolve(process.argv[1] || "") === fileURLToPath(import.meta.url)) {
   else fail("usage: graphify-project.mjs index | search <query> | inspect");
 }
 
-export { safeRelativePath, sanitizeContent, sanitizeStructuredValue };
-||||||| 74c2dfa
-=======
-// Free-form text has no reliable provenance. Preserve only route-shaped tokens
-// with positive endpoint evidence; ambiguous slash-prefixed values still use
-// the filesystem-safe redaction path. This intentionally does not treat every
-// lowercase multi-segment path as a route, because /srv/app/config is just as
-// plausible a machine path as it is an endpoint.
-function isLikelyRouteToken(pathToken) {
-  if (!pathToken.startsWith("/")) return false;
-  if (/^\/(?:api(?:\/|$)|health(?:z)?(?:\/|$)|metrics(?:\/|$)|ready(?:z)?(?:\/|$)|live(?:z)?(?:\/|$)|status(?:\/|$)|graphql(?:\/|$)|v\d+(?:\/|$))/i.test(pathToken)) return true;
-  if (/(?:^|\/)[:][A-Za-z][A-Za-z0-9_-]*(?:[?*])?(?:\/|$)/.test(pathToken)) return true;
-  if (/(?:^|\/)(?:\*{1,2}|\{[A-Za-z][A-Za-z0-9_-]*\})(?:\/|$)/.test(pathToken)) return true;
-  return false;
-}
-
-function preserveRouteToken(pathToken, routes) {
-  const trailing = pathToken.match(/[),.;]}]+$/)?.[0] || "";
-  const candidate = trailing ? pathToken.slice(0, -trailing.length) : pathToken;
-  if (!isLikelyRouteToken(candidate)) return null;
-  routes.push(candidate);
-  return `__GRAPHIFY_ROUTE_${routes.length - 1}__${trailing}`;
-}
-
-function sanitizeContent(content, root) {
-  let sanitized = content.replace(/-----BEGIN [^-]+-----[\s\S]*?-----END [^-]+-----/g, "[private-key-redacted]");
-  sanitized = sanitized.replace(/((?:api[_-]?key|token|password|secret|credential|private[_-]?key)\s*[:=]\s*)(?:\\?"(?:\\.|[^"\\])*\\?"|\\?'(?:\\.|[^'\\])*\\?'|[^\s,;}'"]+)/gi, "$1[redacted]");
-  const urls = [];
-  sanitized = sanitized.replace(/\b(?:https?|ssh|git):\/\/[^\s"'<>]+/gi, (url) => {
-    const index = urls.push(sanitizeUrl(url)) - 1;
-    return `__GRAPHIFY_URL_${index}__`;
-  });
-  const routes = [];
-  sanitized = sanitized.replace(/\b(?:GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS|TRACE)\s+(\/[^\s"'<>]+)/gi, (match, route) => {
-    const preserved = preserveRouteToken(route, routes);
-    if (!preserved) return match;
-    const start = match.indexOf(route);
-    return `${match.slice(0, start)}${preserved}`;
-  });
-  sanitized = sanitized.replace(/(^|[\s"'(=,:])(\/[^\s"'<>]+)/g, (match, prefix, route) => {
-    const preserved = preserveRouteToken(route, routes);
-    return preserved ? `${prefix}${preserved}` : match;
-  });
-  sanitized = sanitized.replace(/(^|[\s"'(=,:])((?:~[\\/]|\$HOME[\\/]|\$\{HOME\}[\\/]|[A-Za-z]:[\\/]|\/)[^\s"'<>\/][^\s"'<>]*)/g, (match, prefix, pathToken) => `${prefix}${sanitizePath(pathToken, root)}`);
-  sanitized = sanitized.replace(/(?:\.\.\/|\.\.\\)+/g, "[traversal-path-redacted]");
-  sanitized = sanitized.replace(/\$\\?\{?HOME\\?\}?/gi, "[home-variable-redacted]");
-  sanitized = sanitized.replace(/__GRAPHIFY_URL_(\d+)__/g, (_, index) => urls[Number(index)]);
-  sanitized = sanitized.replace(/__GRAPHIFY_ROUTE_(\d+)__/g, (_, index) => routes[Number(index)]);
-  return sanitized;
-}
-
-function shouldIndex(path) {
-  const name = basename(path);
-  return INCLUDED_NAMES.has(name) || INCLUDED_EXTENSIONS.has(extname(name).toLowerCase());
-}
-
-function collectFiles(root, diagnostics) {
-  const files = [];
-  function visit(directory) {
-    for (const entry of readdirSync(directory, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
-      if (EXCLUDED_DIRS.has(entry.name) || isExcluded(entry.name)) continue;
-      const path = join(directory, entry.name);
-      if (entry.isDirectory()) {
-        visit(path);
-      } else if (entry.isFile() && shouldIndex(path) && statSync(path).size <= MAX_FILE_BYTES) {
-        const relativePath = safeRelativePath(root, path);
-        if (relativePath) files.push({ path, relativePath });
-        else diagnostics.push({ path: "<excluded-outside-repository>", reason: "path is outside repository" });
-      }
-    }
-  }
-  visit(root);
-  return files;
-}
-
-function category(path) {
-  const rel = path.toLowerCase();
-  if (rel.includes("openspec")) return "openspec";
-  if (rel.includes("fixture") || rel.includes("runs/")) return "fixture";
-  if (basename(path).toLowerCase().startsWith("agents")) return "agent-instructions";
-  if ([".md", ".txt", ".rst"].includes(extname(path).toLowerCase())) return "documentation";
-  if ([".json", ".jsonl", ".yaml", ".yml", ".toml", ".schema", ".sql"].includes(extname(path).toLowerCase())) return "schema-or-config";
-  return "source";
-}
-
-function buildContextIndex(root) {
-  const diagnostics = [];
-  const files = collectFiles(root, diagnostics).map(({ path, relativePath }) => {
-    const content = sanitizeContent(readFileSync(path, "utf8"), root);
-    return {
-      path: relativePath,
-      category: category(path),
-      sha256: createHash("sha256").update(content).digest("hex"),
-      lines: content.split(/\r?\n/).length,
-      content,
-    };
-  });
-  const output = join(root, OUTPUT_DIR);
-  mkdirSync(output, { recursive: true });
-  writeFileSync(join(output, CONTEXT_INDEX), `${JSON.stringify({ version: 1, files, diagnostics }, null, 2)}\n`);
-  return files;
-}
-
-function build(root) {
-  const version = graphifyVersion();
-  if (!version) {
-    fail(`Graphify is unavailable (expected '${basename(GRAPHIFY_BIN)}' on PATH). code evidence unavailable`, 2);
-    return;
-  }
-  const result = spawnSync(GRAPHIFY_BIN, ["extract", ".", "--code-only", "--no-cluster", "--out", "."], {
-    cwd: root,
-    encoding: "utf8",
-    stdio: "pipe",
-  });
-  process.stdout.write(sanitizeContent(result.stdout || "", root));
-  process.stderr.write(sanitizeContent(result.stderr || "", root));
-  if (result.status !== 0 || !existsSync(join(root, OUTPUT_DIR, "graph.json"))) {
-    fail(`Graphify could not build the deterministic code graph (exit ${result.status ?? "unknown"}). code evidence unavailable`, 2);
-    return;
-  }
-  const files = buildContextIndex(root);
-  console.log(`[graphify] context index updated: ${files.length} protected project files`);
-  console.log(`[graphify] graph: ${displayPath(root, join(root, OUTPUT_DIR, "graph.json"))}`);
-  console.log(`[graphify] context search index: ${displayPath(root, join(root, OUTPUT_DIR, CONTEXT_INDEX))}`);
-  console.log(`[graphify] version: ${version}`);
-}
-
-function loadIndex(root) {
-  const path = join(root, OUTPUT_DIR, CONTEXT_INDEX);
-  if (!existsSync(path)) {
-    fail(`index is missing at ${displayPath(root, path)}; run 'npm run graphify:index' first`, 2);
-    return null;
-  }
-  return JSON.parse(readFileSync(path, "utf8"));
-}
-
-function search(root, query) {
-  const index = loadIndex(root);
-  if (!index) return;
-  if (!graphifyVersion()) {
-    fail(`Graphify is unavailable (expected '${basename(GRAPHIFY_BIN)}' on PATH). code evidence unavailable`, 2);
-    return;
-  }
-  const graph = join(root, OUTPUT_DIR, "graph.json");
-  if (!existsSync(graph)) {
-    fail(`Graphify graph is missing at ${displayPath(root, graph)}; run 'npm run graphify:index' first`, 2);
-    return;
-  }
-  const terms = query.toLowerCase().split(/[^a-z0-9_/-]+/).filter(Boolean);
-  if (!terms.length) return fail("search query must contain at least one word");
-  const matches = index.files.map((file) => {
-    const lower = file.content.toLowerCase();
-    const score = terms.reduce((total, term) => total + (lower.includes(term) ? 1 : 0), 0);
-    const line = terms.map((term) => lower.indexOf(term)).filter((value) => value >= 0).sort((a, b) => a - b)[0];
-    const lineNumber = line === undefined ? 1 : file.content.slice(0, line).split(/\r?\n/).length;
-    return { file, score, lineNumber };
-  }).filter((match) => match.score > 0).sort((a, b) => b.score - a.score || a.file.path.localeCompare(b.file.path));
-  console.log(`Query: ${query}`);
-  console.log(`Graphify graph: ${displayPath(root, graph)}`);
-  console.log(`Context matches: ${matches.length}`);
-  for (const { file, score, lineNumber } of matches.slice(0, 10)) {
-    const excerpt = file.content.split(/\r?\n/)[lineNumber - 1]?.trim().slice(0, 180) || "";
-    console.log(`- [${file.category}] ${file.path}:${lineNumber} (terms=${score}) ${excerpt}`);
-  }
-  const graphResult = spawnSync(GRAPHIFY_BIN, ["query", query, "--graph", graph], { cwd: root, encoding: "utf8" });
-  if (graphResult.status === 0) {
-    console.log("\nGraphify structural query:");
-    process.stdout.write(sanitizeContent(graphResult.stdout, root));
-  } else {
-    console.error("\n[graphify] structural query unavailable; deterministic context matches remain available");
-  }
-}
-
-function inspect(root) {
-  const index = loadIndex(root);
-  if (!index) return;
-  const graphPath = join(root, OUTPUT_DIR, "graph.json");
-  if (!existsSync(graphPath)) return fail(`Graphify graph is missing at ${displayPath(root, graphPath)}; run 'npm run graphify:index' first`, 2);
-  const graph = JSON.parse(readFileSync(graphPath, "utf8"));
-  console.log(JSON.stringify({
-    graphifyVersion: graphifyVersion(),
-    graph: { path: relative(root, graphPath), nodes: graph.nodes?.length ?? 0, edges: graph.edges?.length ?? 0 },
-    context: { path: relative(root, join(root, OUTPUT_DIR, CONTEXT_INDEX)), files: index.files.length, byCategory: index.files.reduce((counts, file) => ({ ...counts, [file.category]: (counts[file.category] || 0) + 1 }), {}) },
-    excluded: [...EXCLUDED_DIRS, ".env files", "secret-like filenames", "files larger than 1 MiB", "unsupported/binary files"],
-  }, null, 2));
-}
-
-const [command, ...args] = process.argv.slice(2);
-const root = resolve(process.env.GRAPHIFY_ROOT || ".");
-if (resolve(process.argv[1] || "") === fileURLToPath(import.meta.url)) {
-  if (!existsSync(root)) fail("project root does not exist");
-  else if (command === "index") build(root);
-  else if (command === "search") search(root, args.join(" "));
-  else if (command === "inspect") inspect(root);
-  else fail("usage: graphify-project.mjs index | search <query> | inspect");
-}
 
 export { isLikelyRouteToken, safeRelativePath, sanitizeContent, sanitizeStructuredValue };
->>>>>>> origin/feature/per-29-graphify-integration
