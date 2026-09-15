@@ -1,0 +1,25 @@
+# Graphify safety boundary: never send or parse credentials, generated output,
+# dependencies, worktrees, or large test/browser artifacts.
+.env
+.env.*
+!.env.example
+.git/
+.worktrees/
+node_modules/
+dist/
+coverage/
+test-results/
+graphify-out/
+**/*.mp4
+**/*.webm
+**/*.png
+**/*.jpg
+**/*.jpeg
+**/*.gif
+**/*.zip
+**/*.tar
+**/*.gz
+**/*secret*
+**/*credential*
+**/*token*
+**/*password*

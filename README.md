@@ -21,6 +21,32 @@ No `.env` file is required for the catalog application. The existing
 `.env.example` documents development-tool credentials only; never commit real
 values.
 
+## Local Graphify project context
+
+Graphify is an optional, local development tool. Install the official PyPI
+package in an isolated environment (Python 3.10+ and `uv`):
+
+```bash
+uv tool install graphifyy
+```
+
+Build or refresh the ignored local index from the repository root:
+
+```bash
+npm run graphify:index
+npm run graphify:inspect
+npm run graphify:search -- "search handler intentional delay error"
+```
+
+The index invokes the documented Graphify CLI in deterministic `--code-only`
+mode, which needs no Linear, GitHub, AWS, or runtime application credentials.
+Graphify writes `graphify-out/graph.json`, `GRAPH_REPORT.md`, and related
+generated files; they are intentionally ignored. The companion
+`graphify-out/context-index.json` makes Markdown, OpenSpec, schemas, fixtures,
+and agent instructions searchable without pretending that Graphify's optional
+LLM document pass ran. See [docs/graphify-demo.md](docs/graphify-demo.md) for
+the demo workflow and limitations.
+
 ## Develop
 
 Start the TypeScript server in watch mode:

@@ -9,3 +9,4 @@ coverage/
 npm-debug.log*
 test-results/
 runs/
+graphify-out/
