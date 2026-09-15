@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "status": "complete",
+  "runId": "demo-run-42",
+  "inputDirectory": "runs/demo-run-42",
+  "files": {"config.json":"runs/demo-run-42/config.json","requests.jsonl":"runs/demo-run-42/requests.jsonl","application.log":"runs/demo-run-42/application.log","summary.json":"runs/demo-run-42/summary.json"},
+  "facts": {"requestCount": 8,"successCount": 6,"failureCount": 2,"errorRate": 0.25,"statusCodes":{"200":6,"503":2},"errors":{"SEARCH_SIMULATED_ERROR":2},"durationMs":1000,"interrupted":false},
+  "metrics": {
+    "overall": {"requestCount":8,"successCount":6,"failureCount":2,"errorRate":0.25,"statusCodes":{"200":6,"503":2},"errors":{"SEARCH_SIMULATED_ERROR":2},"latencyMs":{"average":137.5,"p50":100,"p95":300,"p99":300,"max":300},"throughputRequestsPerSecond":8},
+    "byOperation": {
+      "health":{"requestCount":2,"successCount":2,"failureCount":0,"errorRate":0,"statusCodes":{"200":2},"errors":{},"latencyMs":{"average":5,"p50":5,"p95":5,"p99":5,"max":5},"throughputRequestsPerSecond":2},
+      "product_detail":{"requestCount":2,"successCount":2,"failureCount":0,"errorRate":0,"statusCodes":{"200":2},"errors":{},"latencyMs":{"average":20,"p50":20,"p95":20,"p99":20,"max":20},"throughputRequestsPerSecond":2},
+      "product_search":{"requestCount":4,"successCount":2,"failureCount":2,"errorRate":0.5,"statusCodes":{"200":2,"503":2},"errors":{"SEARCH_SIMULATED_ERROR":2},"latencyMs":{"average":200,"p50":200,"p95":300,"p99":300,"max":300},"throughputRequestsPerSecond":4}
+    }
+  },
+  "examples":{"success":[{"requestId":"req-1","operation":"health","status":200,"duration":5,"source":{"file":"requests.jsonl","line":1}}],"slow":[{"requestId":"req-7","operation":"product_search","status":200,"duration":300,"source":{"file":"requests.jsonl","line":7}}],"errors":[{"requestId":"req-8","operation":"product_search","status":503,"duration":250,"errorCode":"SEARCH_SIMULATED_ERROR","source":{"file":"requests.jsonl","line":8}}]},
+  "derivedFindings":["product_search is the slowest measured operation at p95 300 ms versus product_detail at 20 ms."],
+  "hypotheses":[],
+  "issues":[],
+  "graphify":{"status":"unavailable","evidencePath":null,"note":"code evidence unavailable; measured log analysis is still retained."},
+  "dashboardPath":"runs/demo-run-42/dashboard.html",
+  "config":{"scenario":"catalog","commit":"demo-commit-42"}
+}

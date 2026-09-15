@@ -119,30 +119,42 @@ category such as `desk` or `office`, then select **View details**. The page
 uses same-origin API requests and visibly reports loading, empty, and error
 states without external services.
 
-## Performance scenario configuration
+## Standalone performance dashboard
 
-The application reads these optional environment variables. Defaults are
-safe for local development and the request limit and duration have hard upper
-bounds to prevent accidental unbounded runs:
-
-| Variable | Default | Purpose |
-| --- | ---: | --- |
-| `SCENARIO` | `catalog` | Selects the local catalog scenario. |
-| `SEARCH_DELAY_MS` | `250` | Intentional delay applied only to search. Maximum `60000`. |
-| `SEARCH_ERROR_RATE` | `0.02` | Deterministic search failure rate from `0` to `1`. |
-| `LOAD_DURATION_SECONDS` | `60` | Future load-run duration. Maximum `3600`. |
-| `TARGET_REQUESTS` | `20000` | Future load-run target. Maximum `100000`. |
-| `RANDOM_SEED` | `42` | Seed used to choose search failures. |
-| `RUN_ID` | `local` | Safe identifier included in request events. |
-
-For example, run a readable failing scenario locally with:
+Generate the offline report from the JSON output of the PER-27 analyzer:
 
 ```bash
-SEARCH_DELAY_MS=100 SEARCH_ERROR_RATE=0.1 RANDOM_SEED=7 RUN_ID=demo-1 npm run dev
+npm run dashboard:generate -- --input runs/<run-id>/<run-id>-analysis.json \
+  --output runs/<run-id>/dashboard.html
 ```
 
-Every completed request emits one JSON object per line to standard output with
-`runId`, a unique per-run `requestId`, `operation`, HTTP `status`, measured
-`duration`, ISO `timestamp`, and `errorCode` when applicable. Search failures
-return HTTP 503 with `SEARCH_SIMULATED_ERROR`. These events can be redirected
-to a file for a future performance run without a database or external service.
+For the deterministic demo fixture:
+
+```bash
+npm run dashboard:generate -- --input fixtures/dashboard-analysis.json \
+  --output /tmp/performance-dashboard.html
+open /tmp/performance-dashboard.html
+```
+
+The input contract is PER-27 analysis JSON with `schemaVersion: 1`, `status`,
+`runId`, `facts`, `metrics`, `examples`, `issues`, `derivedFindings`,
+`hypotheses`, and `graphify`. Raw counts and distributions are shown separately
+from analyzer findings. Optional `config.commit` and `config.scenario` values
+are shown as metadata; missing values are displayed as “not provided”.
+
+The generated artifact is one HTML file with inline CSS, JavaScript, and SVG.
+It opens directly from the filesystem without a server, build step, CDN, or
+network connection. Latency is in milliseconds and throughput is requests per
+second. Status-code and error chips provide exact counts behind the charts.
+
+Complete reports show measured metrics and derived findings. Incomplete reports
+show warnings, interruption/timeout state, and source issues while omitting
+derived conclusions. Invalid JSON/schema input produces a visible unavailable
+state and the CLI exits `2`; complete and incomplete documents write an artifact
+and exit `0`. Unexpected filesystem failures exit `1`. Input values are escaped
+before insertion into the page.
+
+Known limitations: PER-27 currently provides aggregate metrics rather than
+per-request time-series data, so time-series visuals use deterministic
+aggregate samples. Graphify is a later PER-29 integration; unavailable code
+evidence is shown explicitly and is never turned into a root-cause claim.
