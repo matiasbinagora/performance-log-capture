@@ -30,6 +30,41 @@ describe('log analyzer validation and metrics', () => {
     expect(result.status).toBe('incomplete'); expect(result.issues.map((issue) => issue.code)).toEqual(expect.arrayContaining(['CONFIG_OUT_OF_RANGE', 'CONFIG_INVALID_FIELD', 'CONFIG_UNSUPPORTED_SCENARIO'])); expect(result.status).not.toBe('complete');
   });
 
+  it('rejects every relational limit violation, including simultaneous violations', async () => {
+    for (const [field, maximum, value] of [
+      ['requests', 'maxRequests', 21],
+      ['concurrency', 'maxConcurrency', 6],
+      ['durationSeconds', 'maxDurationSeconds', 61],
+    ] as const) {
+      const directory = await fixture([event('run-fixture', 'req-1')], { [field]: value, [maximum]: value - 1 });
+      const result = await analyzeRun(directory);
+      expect(result.status).toBe('incomplete');
+      expect(result.issues).toEqual(expect.arrayContaining([expect.objectContaining({ code: 'CONFIG_RELATIONAL_LIMIT' })]));
+      expect(result.issues.some((issue) => issue.message.includes(field) && issue.message.includes(maximum))).toBe(true);
+      expect(result.derivedFindings).toEqual([]);
+    }
+
+    const multiple = await fixture([event('run-fixture', 'req-1')], {
+      requests: 21, maxRequests: 20, concurrency: 6, maxConcurrency: 5, durationSeconds: 61, maxDurationSeconds: 60,
+    });
+    const result = await analyzeRun(multiple);
+    expect(result.status).toBe('incomplete');
+    expect(result.issues.filter((issue) => issue.code === 'CONFIG_RELATIONAL_LIMIT')).toHaveLength(3);
+    expect(result.derivedFindings).toEqual([]);
+  });
+
+  it('accepts values equal to and below each configured maximum', async () => {
+    for (const values of [
+      { requests: 20, maxRequests: 20, concurrency: 5, maxConcurrency: 5, durationSeconds: 60, maxDurationSeconds: 60 },
+      { requests: 19, maxRequests: 20, concurrency: 4, maxConcurrency: 5, durationSeconds: 59, maxDurationSeconds: 60 },
+    ]) {
+      const directory = await fixture([event('run-fixture', 'req-1')], values);
+      const result = await analyzeRun(directory);
+      expect(result.status).toBe('complete');
+      expect(result.issues).toEqual([]);
+    }
+  });
+
   it('rejects config/summary, request/config, and application-log run-ID mismatches', async () => {
     const configMismatch = await fixture([event('run-summary', 'req-1')], { runId: 'run-config' }, { runId: 'run-summary' }); const first = await analyzeRun(configMismatch);
     expect(first.status).toBe('incomplete'); expect(first.issues.some((issue) => issue.code === 'RUN_ID_MISMATCH')).toBe(true);

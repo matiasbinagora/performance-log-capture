@@ -57,9 +57,19 @@ function validateConfig(config: RunConfigInput, issues: AnalysisIssue[]): ValidC
   if (typeof config.runId !== 'string' || !config.runId.trim()) { issues.push({ code: 'CONFIG_INVALID_FIELD', message: 'config.json runId must be a non-empty string.', source }); valid = false; }
   if (typeof config.baseUrl !== 'string' || !/^https?:\/\/[^\s]+$/.test(config.baseUrl)) { issues.push({ code: 'CONFIG_INVALID_FIELD', message: 'config.json baseUrl must be an HTTP(S) URL string.', source }); valid = false; }
   if (config.scenario !== 'catalog') { issues.push({ code: 'CONFIG_UNSUPPORTED_SCENARIO', message: "config.json scenario must be 'catalog'.", source }); valid = false; }
-  valid = boundedInteger(config.requests, 1, MAX_REQUESTS, 'requests', issues) && valid; valid = boundedInteger(config.concurrency, 1, MAX_CONCURRENCY, 'concurrency', issues) && valid; valid = boundedInteger(config.durationSeconds, 1, MAX_DURATION_SECONDS, 'durationSeconds', issues) && valid;
+  const requestsValid = boundedInteger(config.requests, 1, MAX_REQUESTS, 'requests', issues); valid = requestsValid && valid;
+  const concurrencyValid = boundedInteger(config.concurrency, 1, MAX_CONCURRENCY, 'concurrency', issues); valid = concurrencyValid && valid;
+  const durationValid = boundedInteger(config.durationSeconds, 1, MAX_DURATION_SECONDS, 'durationSeconds', issues); valid = durationValid && valid;
   if (typeof config.rampSeconds !== 'number' || !Number.isInteger(config.rampSeconds) || config.rampSeconds < 0 || (typeof config.durationSeconds === 'number' && config.rampSeconds > config.durationSeconds)) { issues.push({ code: 'CONFIG_OUT_OF_RANGE', message: 'config.json rampSeconds must be an integer from 0 through durationSeconds.', source }); valid = false; }
-  valid = boundedInteger(config.maxRequests, 1, MAX_REQUESTS, 'maxRequests', issues) && valid; valid = boundedInteger(config.maxConcurrency, 1, MAX_CONCURRENCY, 'maxConcurrency', issues) && valid; valid = boundedInteger(config.maxDurationSeconds, 1, MAX_DURATION_SECONDS, 'maxDurationSeconds', issues) && valid;
+  const maxRequestsValid = boundedInteger(config.maxRequests, 1, MAX_REQUESTS, 'maxRequests', issues); valid = maxRequestsValid && valid;
+  const maxConcurrencyValid = boundedInteger(config.maxConcurrency, 1, MAX_CONCURRENCY, 'maxConcurrency', issues); valid = maxConcurrencyValid && valid;
+  const maxDurationValid = boundedInteger(config.maxDurationSeconds, 1, MAX_DURATION_SECONDS, 'maxDurationSeconds', issues); valid = maxDurationValid && valid;
+  const requests = config.requests as number; const maxRequests = config.maxRequests as number;
+  const concurrency = config.concurrency as number; const maxConcurrency = config.maxConcurrency as number;
+  const durationSeconds = config.durationSeconds as number; const maxDurationSeconds = config.maxDurationSeconds as number;
+  if (requestsValid && maxRequestsValid && requests > maxRequests) { issues.push({ code: 'CONFIG_RELATIONAL_LIMIT', message: `config.json requests (${requests}) must not exceed maxRequests (${maxRequests}).`, source }); valid = false; }
+  if (concurrencyValid && maxConcurrencyValid && concurrency > maxConcurrency) { issues.push({ code: 'CONFIG_RELATIONAL_LIMIT', message: `config.json concurrency (${concurrency}) must not exceed maxConcurrency (${maxConcurrency}).`, source }); valid = false; }
+  if (durationValid && maxDurationValid && durationSeconds > maxDurationSeconds) { issues.push({ code: 'CONFIG_RELATIONAL_LIMIT', message: `config.json durationSeconds (${durationSeconds}) must not exceed maxDurationSeconds (${maxDurationSeconds}).`, source }); valid = false; }
   if (!Number.isInteger(config.seed) || (config.seed as number) < -2_147_483_648 || (config.seed as number) > 2_147_483_647) { issues.push({ code: 'CONFIG_OUT_OF_RANGE', message: 'config.json seed must be a signed 32-bit integer.', source }); valid = false; }
   if (typeof config.errorRate !== 'number' || !Number.isFinite(config.errorRate) || config.errorRate < 0 || config.errorRate > 1) { issues.push({ code: 'CONFIG_OUT_OF_RANGE', message: 'config.json errorRate must be a finite number from 0 through 1.', source }); valid = false; }
   if (typeof config.output !== 'string' || !config.output.trim()) { issues.push({ code: 'CONFIG_INVALID_FIELD', message: 'config.json output must be a non-empty string.', source }); valid = false; }
