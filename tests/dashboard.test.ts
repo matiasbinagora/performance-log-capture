@@ -72,7 +72,7 @@ describe('standalone dashboard', () => {
     const dir = await fs.mkdtemp(join(tmpdir(), 'dashboard-invalid-'));
     const input = join(dir, 'broken.json');
     await fs.writeFile(input, '{broken');
-    const result = spawnSync(process.execPath, ['node_modules/tsx/dist/cli.mjs', 'scripts/performance-dashboard.ts', '--input', input, '--output', join(dir, 'dashboard.html')], { encoding: 'utf8' });
+    const result = spawnSync(process.execPath, ['--import', 'tsx/esm', 'scripts/performance-dashboard.ts', '--input', input, '--output', join(dir, 'dashboard.html')], { encoding: 'utf8' });
     expect(result.status).toBe(2);
     expect(result.stdout).toContain('"status":"invalid"');
   });
@@ -130,6 +130,24 @@ describe('standalone dashboard', () => {
     expect(html).toContain("['detail','search']");
   });
 
+  it('validates exact run directories, safe normalization, traversal, and nested artifacts', () => {
+    const make = (inputDirectory: string, summaryPath: string, dashboardPath = 'runs/demo-run-42/dashboard.html') => ({
+      ...fixture,
+      inputDirectory,
+      dashboardPath,
+      files: { ...(fixture.files as Record<string, unknown>), 'summary.json': summaryPath },
+    });
+    const codes = (value: unknown) => validateAnalysis(value).issues.map((issue) => issue.code);
+
+    expect(validateAnalysis(make('runs/demo-run-42', 'runs/demo-run-42/summary.json')).status).toBe('complete');
+    expect(validateAnalysis(make('runs/./demo-run-42', 'runs\\demo-run-42\\nested\\summary.json', 'runs\\demo-run-42\\nested\\dashboard.html')).status).toBe('complete');
+    expect(validateAnalysis(make('runs/demo-run-42', 'runs/demo-run-42/nested/output/summary.json')).status).toBe('complete');
+    expect(codes(make('runs/demo-run-42-other', 'runs/demo-run-42-other/summary.json'))).toContain('RUN_ID_MISMATCH');
+    expect(codes(make('runs/demo-run-42-extra', 'runs/demo-run-42-extra/summary.json'))).toContain('RUN_ID_MISMATCH');
+    expect(codes(make('runs/demo-run-42', 'runs/demo-run-42/../demo-run-42-other/summary.json'))).toContain('ARTIFACT_RELATIONSHIP_MISMATCH');
+    expect(codes(make('runs/demo-run-42', 'runs/demo-run-42/summary.json', 'runs/demo-run-42/../demo-run-42-other/dashboard.html'))).toContain('ARTIFACT_RELATIONSHIP_MISMATCH');
+    expect(codes(make('runs/demo-run-42', 'runs/other/summary.json'))).toContain('ARTIFACT_RELATIONSHIP_MISMATCH');
+    expect(codes(make('runs/demo-run-42', 'runs/demo-run-42/summary.json', 'runs/demo-run-42-other/dashboard.html'))).toContain('ARTIFACT_RELATIONSHIP_MISMATCH');
+    expect(codes({ ...make('runs/demo-run-42', 'runs/demo-run-42/summary.json'), files: { ...(fixture.files as Record<string, unknown>), 'summary.json': '' } })).toContain('MISSING_REQUIRED_FIELD');
+  });
 });
-
-
