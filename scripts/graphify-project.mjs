@@ -3,7 +3,8 @@
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
-import { basename, extname, join, relative, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { basename, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 const OUTPUT_DIR = "graphify-out";
 const CONTEXT_INDEX = "context-index.json";
@@ -33,12 +34,43 @@ function isExcluded(name) {
   return EXCLUDED_NAMES.some((pattern) => pattern.test(name));
 }
 
+function safeRelativePath(root, path) {
+  const rel = relative(root, path);
+  if (!rel || isAbsolute(rel) || rel === ".." || rel.startsWith(`..${sep}`)) return null;
+  return rel.split(sep).join("/");
+}
+
+function displayPath(root, path) {
+  return safeRelativePath(root, path) || "<outside-repository>";
+}
+
+function sanitizePath(pathToken, root) {
+  const trailing = pathToken.match(/[),.;]}]+$/)?.[0] || "";
+  const pathValue = trailing ? pathToken.slice(0, -trailing.length) : pathToken;
+  if (/^(?:~|\$HOME|\$\{HOME\})(?:[\\/]|$)/i.test(pathValue)) return `[home-path-redacted]${trailing}`;
+  if (/^[A-Za-z]:[\\/]/.test(pathValue)) return `[absolute-path-redacted]${trailing}`;
+  if (/^\/[A-Za-z0-9_-]+$/.test(pathValue)) return pathToken;
+  if (!pathValue.startsWith("/")) return pathToken;
+  const relativePath = safeRelativePath(root, resolve(pathValue));
+  return relativePath ? `${relativePath}${trailing}` : `[absolute-path-redacted]${trailing}`;
+}
+
+function sanitizeContent(content, root) {
+  let sanitized = content.replace(/-----BEGIN [^-]+-----[\s\S]*?-----END [^-]+-----/g, "[private-key-redacted]");
+  sanitized = sanitized.replace(/((?:api[_-]?key|token|password|secret|credential|private[_-]?key)\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s,;}'"]+)/gi, "$1[redacted]");
+  sanitized = sanitized.replace(/\b(?:https?|ssh|git):\/\/[^\s"'<>]+/gi, "[external-url-redacted]");
+  sanitized = sanitized.replace(/(^|[\s"'(=,:])((?:~[\\/]|\$HOME[\\/]|\$\{HOME\}[\\/]|[A-Za-z]:[\\/]|\/)[^\s"'<>]*)/g, (match, prefix, pathToken) => `${prefix}${sanitizePath(pathToken, root)}`);
+  sanitized = sanitized.replace(/\\?\/(?:Users|private|var)\//gi, "[absolute-path-redacted]/");
+  sanitized = sanitized.replace(/\.\.\//g, "[traversal-path-redacted]").replace(/\.\.\\/g, "[traversal-path-redacted]");
+  return sanitized;
+}
+
 function shouldIndex(path) {
   const name = basename(path);
   return INCLUDED_NAMES.has(name) || INCLUDED_EXTENSIONS.has(extname(name).toLowerCase());
 }
 
-function collectFiles(root) {
+function collectFiles(root, diagnostics) {
   const files = [];
   function visit(directory) {
     for (const entry of readdirSync(directory, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
@@ -47,7 +79,9 @@ function collectFiles(root) {
       if (entry.isDirectory()) {
         visit(path);
       } else if (entry.isFile() && shouldIndex(path) && statSync(path).size <= MAX_FILE_BYTES) {
-        files.push(path);
+        const relativePath = safeRelativePath(root, path);
+        if (relativePath) files.push({ path, relativePath });
+        else diagnostics.push({ path: "<excluded-outside-repository>", reason: "path is outside repository" });
       }
     }
   }
@@ -66,10 +100,11 @@ function category(path) {
 }
 
 function buildContextIndex(root) {
-  const files = collectFiles(root).map((path) => {
-    const content = readFileSync(path, "utf8");
+  const diagnostics = [];
+  const files = collectFiles(root, diagnostics).map(({ path, relativePath }) => {
+    const content = sanitizeContent(readFileSync(path, "utf8"), root);
     return {
-      path: relative(root, path),
+      path: relativePath,
       category: category(path),
       sha256: createHash("sha256").update(content).digest("hex"),
       lines: content.split(/\r?\n/).length,
@@ -78,14 +113,14 @@ function buildContextIndex(root) {
   });
   const output = join(root, OUTPUT_DIR);
   mkdirSync(output, { recursive: true });
-  writeFileSync(join(output, CONTEXT_INDEX), `${JSON.stringify({ version: 1, files }, null, 2)}\n`);
+  writeFileSync(join(output, CONTEXT_INDEX), `${JSON.stringify({ version: 1, files, diagnostics }, null, 2)}\n`);
   return files;
 }
 
 function build(root) {
   const version = graphifyVersion();
   if (!version) {
-    fail(`Graphify is unavailable (expected '${GRAPHIFY_BIN}' on PATH). code evidence unavailable`, 2);
+    fail(`Graphify is unavailable (expected '${basename(GRAPHIFY_BIN)}' on PATH). code evidence unavailable`, 2);
     return;
   }
   const result = spawnSync(GRAPHIFY_BIN, ["extract", ".", "--code-only", "--no-cluster", "--out", "."], {
@@ -93,23 +128,23 @@ function build(root) {
     encoding: "utf8",
     stdio: "pipe",
   });
-  process.stdout.write(result.stdout || "");
-  process.stderr.write(result.stderr || "");
+  process.stdout.write(sanitizeContent(result.stdout || "", root));
+  process.stderr.write(sanitizeContent(result.stderr || "", root));
   if (result.status !== 0 || !existsSync(join(root, OUTPUT_DIR, "graph.json"))) {
     fail(`Graphify could not build the deterministic code graph (exit ${result.status ?? "unknown"}). code evidence unavailable`, 2);
     return;
   }
   const files = buildContextIndex(root);
   console.log(`[graphify] context index updated: ${files.length} protected project files`);
-  console.log(`[graphify] graph: ${join(OUTPUT_DIR, "graph.json")}`);
-  console.log(`[graphify] context search index: ${join(OUTPUT_DIR, CONTEXT_INDEX)}`);
+  console.log(`[graphify] graph: ${displayPath(root, join(root, OUTPUT_DIR, "graph.json"))}`);
+  console.log(`[graphify] context search index: ${displayPath(root, join(root, OUTPUT_DIR, CONTEXT_INDEX))}`);
   console.log(`[graphify] version: ${version}`);
 }
 
 function loadIndex(root) {
   const path = join(root, OUTPUT_DIR, CONTEXT_INDEX);
   if (!existsSync(path)) {
-    fail(`index is missing at ${path}; run 'npm run graphify:index' first`, 2);
+    fail(`index is missing at ${displayPath(root, path)}; run 'npm run graphify:index' first`, 2);
     return null;
   }
   return JSON.parse(readFileSync(path, "utf8"));
@@ -119,12 +154,12 @@ function search(root, query) {
   const index = loadIndex(root);
   if (!index) return;
   if (!graphifyVersion()) {
-    fail(`Graphify is unavailable (expected '${GRAPHIFY_BIN}' on PATH). code evidence unavailable`, 2);
+    fail(`Graphify is unavailable (expected '${basename(GRAPHIFY_BIN)}' on PATH). code evidence unavailable`, 2);
     return;
   }
   const graph = join(root, OUTPUT_DIR, "graph.json");
   if (!existsSync(graph)) {
-    fail(`Graphify graph is missing at ${graph}; run 'npm run graphify:index' first`, 2);
+    fail(`Graphify graph is missing at ${displayPath(root, graph)}; run 'npm run graphify:index' first`, 2);
     return;
   }
   const terms = query.toLowerCase().split(/[^a-z0-9_/-]+/).filter(Boolean);
@@ -137,7 +172,7 @@ function search(root, query) {
     return { file, score, lineNumber };
   }).filter((match) => match.score > 0).sort((a, b) => b.score - a.score || a.file.path.localeCompare(b.file.path));
   console.log(`Query: ${query}`);
-  console.log(`Graphify graph: ${graph}`);
+  console.log(`Graphify graph: ${displayPath(root, graph)}`);
   console.log(`Context matches: ${matches.length}`);
   for (const { file, score, lineNumber } of matches.slice(0, 10)) {
     const excerpt = file.content.split(/\r?\n/)[lineNumber - 1]?.trim().slice(0, 180) || "";
@@ -146,7 +181,7 @@ function search(root, query) {
   const graphResult = spawnSync(GRAPHIFY_BIN, ["query", query, "--graph", graph], { cwd: root, encoding: "utf8" });
   if (graphResult.status === 0) {
     console.log("\nGraphify structural query:");
-    process.stdout.write(graphResult.stdout);
+    process.stdout.write(sanitizeContent(graphResult.stdout, root));
   } else {
     console.error("\n[graphify] structural query unavailable; deterministic context matches remain available");
   }
@@ -156,7 +191,7 @@ function inspect(root) {
   const index = loadIndex(root);
   if (!index) return;
   const graphPath = join(root, OUTPUT_DIR, "graph.json");
-  if (!existsSync(graphPath)) return fail(`Graphify graph is missing at ${graphPath}; run 'npm run graphify:index' first`, 2);
+  if (!existsSync(graphPath)) return fail(`Graphify graph is missing at ${displayPath(root, graphPath)}; run 'npm run graphify:index' first`, 2);
   const graph = JSON.parse(readFileSync(graphPath, "utf8"));
   console.log(JSON.stringify({
     graphifyVersion: graphifyVersion(),
@@ -168,8 +203,12 @@ function inspect(root) {
 
 const [command, ...args] = process.argv.slice(2);
 const root = resolve(process.env.GRAPHIFY_ROOT || ".");
-if (!existsSync(root)) fail(`project root does not exist: ${root}`);
-else if (command === "index") build(root);
-else if (command === "search") search(root, args.join(" "));
-else if (command === "inspect") inspect(root);
-else fail("usage: graphify-project.mjs index | search <query> | inspect");
+if (resolve(process.argv[1] || "") === fileURLToPath(import.meta.url)) {
+  if (!existsSync(root)) fail("project root does not exist");
+  else if (command === "index") build(root);
+  else if (command === "search") search(root, args.join(" "));
+  else if (command === "inspect") inspect(root);
+  else fail("usage: graphify-project.mjs index | search <query> | inspect");
+}
+
+export { safeRelativePath, sanitizeContent };
