@@ -18,8 +18,6 @@ const INCLUDED_EXTENSIONS = new Set([
   ".md", ".txt", ".rst", ".css", ".html", ".sh", ".dockerfile", ".conf", ".schema",
 ]);
 const INCLUDED_NAMES = new Set(["AGENTS.md", "Dockerfile", ".gitignore"]);
-const KNOWN_FILESYSTEM_ROOTS = /^(?:\/(?:Users|private|var|tmp|etc|opt|Applications|Library|Volumes|System|usr|bin|sbin|dev|home)(?:\/|$))/i;
-const FILE_LIKE_PATH = /(?:^|\/)[^/]+\.[A-Za-z0-9]{1,16}$/;
 
 function fail(message, code = 1) {
   console.error(`[graphify] ${message}`);
@@ -53,12 +51,11 @@ function sanitizeUrl(url) {
 }
 
 /*
- * A leading slash is ambiguous in source and documentation: it can introduce
- * an HTTP route (`/api/users`) or an absolute filesystem path. Classify a
- * slash-prefixed token as a filesystem path only when there is evidence:
- * repository-root resolution, an existing filesystem entry, a known OS path
- * root, or a file-like extension. Ambiguous route/project-context strings are
- * preserved so the index remains useful without depending on a route allowlist.
+ * File locations are structured values, so an absolute value outside the
+ * repository is never retained, including extensionless values. Free-form
+ * content is handled separately below: route-shaped values are protected only
+ * when surrounding syntax identifies a route/endpoint, while ambiguous
+ * absolute values take the safe redacting path.
  */
 function sanitizePath(pathToken, root) {
   const trailing = pathToken.match(/[),.;]}]+$/)?.[0] || "";
@@ -68,10 +65,21 @@ function sanitizePath(pathToken, root) {
   if (!pathValue.startsWith("/")) return pathToken;
   const relativePath = safeRelativePath(root, resolve(pathValue));
   if (relativePath) return `${relativePath}${trailing}`;
-  if (existsSync(pathValue) || KNOWN_FILESYSTEM_ROOTS.test(pathValue) || FILE_LIKE_PATH.test(pathValue)) {
-    return `[absolute-path-redacted]${trailing}`;
-  }
-  return pathToken;
+  return `[absolute-path-redacted]${trailing}`;
+}
+
+function sanitizeFilePath(filePath, root) {
+  if (/[\\/]\.\.(?:[\\/]|$)/.test(filePath)) return "[traversal-path-redacted]";
+  if (isAbsolute(filePath)) return sanitizePath(filePath, root);
+  const relativePath = safeRelativePath(root, resolve(root, filePath));
+  return relativePath || "[relative-path-redacted]";
+}
+
+function sanitizeStructuredValue(value, provenance, root) {
+  if (provenance === "filePath") return sanitizeFilePath(value, root);
+  if (provenance === "route") return value;
+  if (provenance === "url") return sanitizeUrl(value);
+  return sanitizeContent(value, root);
 }
 
 function sanitizeContent(content, root) {
@@ -82,10 +90,17 @@ function sanitizeContent(content, root) {
     const index = urls.push(sanitizeUrl(url)) - 1;
     return `__GRAPHIFY_URL_${index}__`;
   });
+  const routes = [];
+  sanitized = sanitized.replace(/\b(?:GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS|TRACE)\s+(\/[^\s"'<>]+)/gi, (match, route) => {
+    const start = match.indexOf(route);
+    routes.push(route);
+    return `${match.slice(0, start)}__GRAPHIFY_ROUTE_${routes.length - 1}__`;
+  });
   sanitized = sanitized.replace(/(^|[\s"'(=,:])((?:~[\\/]|\$HOME[\\/]|\$\{HOME\}[\\/]|[A-Za-z]:[\\/]|\/)[^\s"'<>\/][^\s"'<>]*)/g, (match, prefix, pathToken) => `${prefix}${sanitizePath(pathToken, root)}`);
   sanitized = sanitized.replace(/(?:\.\.\/|\.\.\\)+/g, "[traversal-path-redacted]");
   sanitized = sanitized.replace(/\$\\?\{?HOME\\?\}?/gi, "[home-variable-redacted]");
   sanitized = sanitized.replace(/__GRAPHIFY_URL_(\d+)__/g, (_, index) => urls[Number(index)]);
+  sanitized = sanitized.replace(/__GRAPHIFY_ROUTE_(\d+)__/g, (_, index) => routes[Number(index)]);
   return sanitized;
 }
 
@@ -235,4 +250,4 @@ if (resolve(process.argv[1] || "") === fileURLToPath(import.meta.url)) {
   else fail("usage: graphify-project.mjs index | search <query> | inspect");
 }
 
-export { safeRelativePath, sanitizeContent };
+export { safeRelativePath, sanitizeContent, sanitizeStructuredValue };
