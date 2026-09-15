@@ -140,7 +140,9 @@ The input contract is PER-27 analysis JSON with `schemaVersion: 1`, `status`,
 `runId`, `facts`, `metrics`, `examples`, `issues`, `derivedFindings`,
 `hypotheses`, and `graphify`. Raw counts and distributions are shown separately
 from analyzer findings. Optional `config.commit` and `config.scenario` values
-are shown as metadata; missing values are displayed as “not provided”.
+are shown as metadata; missing values are displayed as “not provided”. The
+validator also checks artifact relationships, run identity, types, totals,
+distributions, and metric consistency before generating the report.
 
 The generated artifact is one HTML file with inline CSS, JavaScript, and SVG.
 It opens directly from the filesystem without a server, build step, CDN, or
@@ -155,6 +157,7 @@ and exit `0`. Unexpected filesystem failures exit `1`. Input values are escaped
 before insertion into the page.
 
 Known limitations: PER-27 currently provides aggregate metrics rather than
-per-request time-series data, so time-series visuals use deterministic
-aggregate samples. Graphify is a later PER-29 integration; unavailable code
+per-request time-series data. When timestamped `metrics.timeSeries` observations
+are absent, time-series visuals show an explicit insufficient-data state rather
+than an invented trend. Graphify is a later PER-29 integration; unavailable code
 evidence is shown explicitly and is never turned into a root-cause claim.
