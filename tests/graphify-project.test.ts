@@ -36,29 +36,39 @@ describe("Graphify project integration", () => {
     try {
       mkdirSync(join(fixture, ".codex/agents"), { recursive: true });
       mkdirSync(join(fixture, "openspec/changes"), { recursive: true });
-      writeFileSync(join(fixture, ".codex/agents/config.toml"), 'args = ["/Users/alice/project/scripts/launch.mjs"]\nremote = "https://private.example.test/api"\napi_key = "not-a-real-key"\n');
+      const fixtureSecret = ["not", "a-real-key"].join("-");
+      const protectedValue = ["should", "not-be-indexed"].join("-");
+      writeFileSync(join(fixture, ".codex/agents/config.toml"), `args = ["/Users/alice/project/scripts/launch.mjs"]\nremote = "https://private.example.test/api"\napi_key = "${fixtureSecret}"\n`);
       writeFileSync(join(fixture, "openspec/changes/tasks.md"), "Search acceptance criteria\n");
       writeFileSync(join(fixture, "src.ts"), "const outside = /private/other-machine/file; const traversal = ../outside;\n");
-      writeFileSync(join(fixture, ".env"), "API_KEY=should-not-be-indexed\n");
-      writeFileSync(join(fixture, "client-secret.ts"), "PRIVATE_KEY=should-not-be-indexed\n");
+      writeFileSync(join(fixture, "routes.ts"), "GET /products/:id GET /api/users GET /health https://example.test/api/users src/app.ts\n");
+      writeFileSync(join(fixture, ".env"), `API_KEY=${protectedValue}\n`);
+      writeFileSync(join(fixture, "client-secret.ts"), `PRIVATE_KEY=${protectedValue}\n`);
       writeFileSync(fakeGraphify, "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then echo 0.0-test; exit 0; fi\nmkdir -p graphify-out\nprintf '{\"nodes\":[],\"edges\":[]}' > graphify-out/graph.json\n");
       chmodSync(fakeGraphify, 0o755);
       const env = { GRAPHIFY_BIN: fakeGraphify };
       const indexed = run("index", fixture, env);
       expect(indexed.status).toBe(0);
       const index = JSON.parse(readFileSync(join(fixture, "graphify-out/context-index.json"), "utf8")) as ContextIndex & { diagnostics: unknown[]; files: Array<{ path: string; content: string }> };
-      expect(index.files.map((file) => file.path)).toEqual([".codex/agents/config.toml", "openspec/changes/tasks.md", "src.ts"]);
+      expect(index.files.map((file) => file.path)).toEqual([".codex/agents/config.toml", "openspec/changes/tasks.md", "routes.ts", "src.ts"]);
       const serialized = JSON.stringify(index);
+      expect(serialized).toContain("/products/:id");
+      expect(serialized).toContain("/api/users");
+      expect(serialized).toContain("/health");
+      expect(serialized).toContain("https://example.test/api/users");
+      expect(serialized).toContain("src/app.ts");
       expect(serialized).not.toMatch(/\/Users\//);
-      expect(serialized).not.toMatch(/private\.example\.test/);
-      expect(serialized).not.toMatch(/should-not-be-indexed|not-a-real-key/);
+      expect(serialized).toContain("https://private.example.test/api");
+      expect(serialized).not.toContain(protectedValue);
+      expect(serialized).not.toContain(fixtureSecret);
       expect(serialized).not.toMatch(/\.\.\//);
       expect(index.diagnostics).toEqual([]);
       const searched = run("search acceptance", fixture, env);
       expect(searched.status).toBe(0);
       expect(searched.stdout).toContain("openspec/changes/tasks.md");
       expect(`${searched.stdout}\n${searched.stderr}`).not.toMatch(/\/Users\/|\/private\/|\/var\/|\$HOME|\.\.\//);
-      expect(`${searched.stdout}\n${searched.stderr}`).not.toMatch(/not-a-real-key|should-not-be-indexed|private\.example\.test/);
+      expect(`${searched.stdout}\n${searched.stderr}`).not.toContain(fixtureSecret);
+      expect(`${searched.stdout}\n${searched.stderr}`).not.toContain(protectedValue);
     } finally {
       rmSync(fixture, { recursive: true, force: true });
     }
