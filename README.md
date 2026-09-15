@@ -203,4 +203,11 @@ Exit codes are `0` for a complete analysis, `2` for malformed/incomplete input,
 and `1` for an analyzer failure. Incomplete input contains no derived findings
 or invented root cause. The output includes a future `dashboardPath` for the
 standalone dashboard and labels Graphify as `code evidence unavailable` until a
- Graphify result is supplied with `--graphify-evidence <path>`.
+Graphify result is supplied with `--graphify-evidence <path>`.
+
+
+## Log analysis validation
+
+The `logging-agent` workflow requires the four run artifacts and validates `config.json` before analysis. The configuration must contain non-empty `runId`, HTTP(S) `baseUrl`, `scenario: "catalog"`, positive bounded integer `requests`, `concurrency`, and `durationSeconds`, integer `rampSeconds` from zero through the duration, signed 32-bit integer `seed`, finite `errorRate` from zero through one, non-empty `output`, and positive bounded `maxRequests`, `maxConcurrency`, and `maxDurationSeconds` values.
+
+Missing fields, malformed JSON, invalid types, zero/negative/out-of-range values, unsupported scenarios, and disagreement between config, summary, request records, or JSON application-log `runId` values return exit code `2`. They produce source-attributed codes such as `CONFIG_MISSING_FIELD`, `CONFIG_INVALID_FIELD`, `CONFIG_OUT_OF_RANGE`, and `RUN_ID_MISMATCH`, with no derived findings and never a `status: "complete"` result.
