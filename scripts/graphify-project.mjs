@@ -18,6 +18,8 @@ const INCLUDED_EXTENSIONS = new Set([
   ".md", ".txt", ".rst", ".css", ".html", ".sh", ".dockerfile", ".conf", ".schema",
 ]);
 const INCLUDED_NAMES = new Set(["AGENTS.md", "Dockerfile", ".gitignore"]);
+const KNOWN_FILESYSTEM_ROOTS = /^(?:\/(?:Users|private|var|tmp|etc|opt|Applications|Library|Volumes|System|usr|bin|sbin|dev|home)(?:\/|$))/i;
+const FILE_LIKE_PATH = /(?:^|\/)[^/]+\.[A-Za-z0-9]{1,16}$/;
 
 function fail(message, code = 1) {
   console.error(`[graphify] ${message}`);
@@ -44,24 +46,46 @@ function displayPath(root, path) {
   return safeRelativePath(root, path) || "<outside-repository>";
 }
 
+function sanitizeUrl(url) {
+  return url
+    .replace(/\/\/[^\s/]+:[^\s/@]+@/i, "//[credentials-redacted]@")
+    .replace(/([?&](?:api[_-]?key|token|password|secret|credential|private[_-]?key)=)[^&#\s]*/gi, "$1[redacted]");
+}
+
+/*
+ * A leading slash is ambiguous in source and documentation: it can introduce
+ * an HTTP route (`/api/users`) or an absolute filesystem path. Classify a
+ * slash-prefixed token as a filesystem path only when there is evidence:
+ * repository-root resolution, an existing filesystem entry, a known OS path
+ * root, or a file-like extension. Ambiguous route/project-context strings are
+ * preserved so the index remains useful without depending on a route allowlist.
+ */
 function sanitizePath(pathToken, root) {
   const trailing = pathToken.match(/[),.;]}]+$/)?.[0] || "";
   const pathValue = trailing ? pathToken.slice(0, -trailing.length) : pathToken;
   if (/^(?:~|\$HOME|\$\{HOME\})(?:[\\/]|$)/i.test(pathValue)) return `[home-path-redacted]${trailing}`;
   if (/^[A-Za-z]:[\\/]/.test(pathValue)) return `[absolute-path-redacted]${trailing}`;
-  if (/^\/[A-Za-z0-9_-]+$/.test(pathValue)) return pathToken;
   if (!pathValue.startsWith("/")) return pathToken;
   const relativePath = safeRelativePath(root, resolve(pathValue));
-  return relativePath ? `${relativePath}${trailing}` : `[absolute-path-redacted]${trailing}`;
+  if (relativePath) return `${relativePath}${trailing}`;
+  if (existsSync(pathValue) || KNOWN_FILESYSTEM_ROOTS.test(pathValue) || FILE_LIKE_PATH.test(pathValue)) {
+    return `[absolute-path-redacted]${trailing}`;
+  }
+  return pathToken;
 }
 
 function sanitizeContent(content, root) {
   let sanitized = content.replace(/-----BEGIN [^-]+-----[\s\S]*?-----END [^-]+-----/g, "[private-key-redacted]");
-  sanitized = sanitized.replace(/((?:api[_-]?key|token|password|secret|credential|private[_-]?key)\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s,;}'"]+)/gi, "$1[redacted]");
-  sanitized = sanitized.replace(/\b(?:https?|ssh|git):\/\/[^\s"'<>]+/gi, "[external-url-redacted]");
-  sanitized = sanitized.replace(/(^|[\s"'(=,:])((?:~[\\/]|\$HOME[\\/]|\$\{HOME\}[\\/]|[A-Za-z]:[\\/]|\/)[^\s"'<>]*)/g, (match, prefix, pathToken) => `${prefix}${sanitizePath(pathToken, root)}`);
-  sanitized = sanitized.replace(/\\?\/(?:Users|private|var)\//gi, "[absolute-path-redacted]/");
-  sanitized = sanitized.replace(/\.\.\//g, "[traversal-path-redacted]").replace(/\.\.\\/g, "[traversal-path-redacted]");
+  sanitized = sanitized.replace(/((?:api[_-]?key|token|password|secret|credential|private[_-]?key)\s*[:=]\s*)(?:\\?"(?:\\.|[^"\\])*\\?"|\\?'(?:\\.|[^'\\])*\\?'|[^\s,;}'"]+)/gi, "$1[redacted]");
+  const urls = [];
+  sanitized = sanitized.replace(/\b(?:https?|ssh|git):\/\/[^\s"'<>]+/gi, (url) => {
+    const index = urls.push(sanitizeUrl(url)) - 1;
+    return `__GRAPHIFY_URL_${index}__`;
+  });
+  sanitized = sanitized.replace(/(^|[\s"'(=,:])((?:~[\\/]|\$HOME[\\/]|\$\{HOME\}[\\/]|[A-Za-z]:[\\/]|\/)[^\s"'<>\/][^\s"'<>]*)/g, (match, prefix, pathToken) => `${prefix}${sanitizePath(pathToken, root)}`);
+  sanitized = sanitized.replace(/(?:\.\.\/|\.\.\\)+/g, "[traversal-path-redacted]");
+  sanitized = sanitized.replace(/\$\\?\{?HOME\\?\}?/gi, "[home-variable-redacted]");
+  sanitized = sanitized.replace(/__GRAPHIFY_URL_(\d+)__/g, (_, index) => urls[Number(index)]);
   return sanitized;
 }
 
