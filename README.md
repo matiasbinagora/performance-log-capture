@@ -174,7 +174,40 @@ Each run creates `runs/<run-id>/config.json`, `requests.jsonl`,
 `application.log`, and `summary.json`. The summary records actual counts,
 operation distribution, duration, errors, latency percentiles, and
 `throughput.requestsPerSecond` (completed requests per elapsed second, rounded
-aborted after `--request-timeout-ms` (default 10000 ms); Ctrl-C
-marks a run `incomplete`; incomplete runs are never passing results. The
-command rejects unknown options before checking the application and prints the
-exact `logging-agent` handoff command when it finishes.
+to two decimals). Requests time out after `--request-timeout-ms` (default 10000
+ms); Ctrl-C marks a run `incomplete`; incomplete runs are never passing
+results. The command rejects unknown options before checking the application
+and prints the exact `logging-agent` handoff command when it finishes.
+
+## Log analysis agent
+
+Analyze a run with the local English `logging-agent` support script:
+
+```bash
+npm run log-analysis -- --input runs/<run-id> --output runs/<run-id>/<run-id>-analysis.json
+```
+
+The analyzer validates all four required artifacts, streams `requests.jsonl`,
+correlates records by run ID, and writes deterministic machine-readable JSON.
+It reports request volume, success and failure counts, status codes, errors,
+average/p50/p95/p99/max latency, throughput, interruption state, validation
+issues, and up to three source-traceable examples for success, slow, and error
+events. It never silently drops malformed or duplicate records: excluded
+records are listed with file and line references.
+
+Latency averages and maxima are exact. Percentiles use a deterministic fixed
+sample (up to 10,000 latencies) so very large JSONL files do not grow analyzer
+memory without bound; request/error counters continue to cover the full file.
+
+Exit codes are `0` for a complete analysis, `2` for malformed/incomplete input,
+and `1` for an analyzer failure. Incomplete input contains no derived findings
+or invented root cause. The output includes a future `dashboardPath` for the
+standalone dashboard and labels Graphify as `code evidence unavailable` until a
+Graphify result is supplied with `--graphify-evidence <path>`.
+
+
+## Log analysis validation
+
+The `logging-agent` workflow requires the four run artifacts and validates `config.json` before analysis. The configuration must contain non-empty `runId`, HTTP(S) `baseUrl`, `scenario: "catalog"`, positive bounded integer `requests`, `concurrency`, and `durationSeconds`, integer `rampSeconds` from zero through the duration, signed 32-bit integer `seed`, finite `errorRate` from zero through one, non-empty `output`, and positive bounded `maxRequests`, `maxConcurrency`, and `maxDurationSeconds` values.
+
+Missing fields, malformed JSON, invalid types, zero/negative/out-of-range values, requested `requests`, `concurrency`, or `durationSeconds` above their configured maxima, unsupported scenarios, and disagreement between config, summary, request records, or JSON application-log `runId` values return exit code `2`. They produce source-attributed codes such as `CONFIG_MISSING_FIELD`, `CONFIG_INVALID_FIELD`, `CONFIG_OUT_OF_RANGE`, `CONFIG_RELATIONAL_LIMIT`, and `RUN_ID_MISMATCH`, with no derived findings and never a `status: "complete"` result. Valid values equal to or below their maxima remain accepted.

@@ -79,14 +79,17 @@ export function validateRunConfig(input: Partial<RunConfig>): RunConfig {
   const config = { ...DEFAULT_RUN_CONFIG, ...input };
   if (config.scenario !== 'catalog') throw new RunConfigError("scenario must be 'catalog'.");
   if (!/^https?:\/\/[^\s]+$/.test(config.baseUrl)) throw new RunConfigError('baseUrl must be an HTTP(S) URL.');
-  integer(config.requests, 0, config.maxRequests, 'requests');
-  integer(config.concurrency, 1, config.maxConcurrency, 'concurrency');
-  integer(config.durationSeconds, 1, config.maxDurationSeconds, 'durationSeconds');
-  integer(config.rampSeconds, 0, config.durationSeconds, 'rampSeconds');
   integer(config.maxRequests, 1, 100_000, 'maxRequests');
   integer(config.maxConcurrency, 1, 1_000, 'maxConcurrency');
   integer(config.maxDurationSeconds, 1, 3_600, 'maxDurationSeconds');
+  integer(config.requests, 0, 100_000, 'requests');
+  integer(config.concurrency, 1, 1_000, 'concurrency');
+  integer(config.durationSeconds, 1, 3_600, 'durationSeconds');
+  integer(config.rampSeconds, 0, config.durationSeconds, 'rampSeconds');
   integer(config.requestTimeoutMs, 1, 3_600_000, 'requestTimeoutMs');
+  if (config.requests > config.maxRequests) throw new RunConfigError(`requests (${config.requests}) must not exceed maxRequests (${config.maxRequests}).`);
+  if (config.concurrency > config.maxConcurrency) throw new RunConfigError(`concurrency (${config.concurrency}) must not exceed maxConcurrency (${config.maxConcurrency}).`);
+  if (config.durationSeconds > config.maxDurationSeconds) throw new RunConfigError(`durationSeconds (${config.durationSeconds}) must not exceed maxDurationSeconds (${config.maxDurationSeconds}).`);
   integer(config.seed, -2_147_483_648, 2_147_483_647, 'seed');
   if (!Number.isFinite(config.errorRate) || config.errorRate < 0 || config.errorRate > 1) {
     throw new RunConfigError('errorRate must be between 0 and 1.');

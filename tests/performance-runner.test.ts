@@ -18,6 +18,19 @@ describe('performance runner', () => {
     expect(() => validateRunConfig({ durationSeconds: 3_601 })).toThrow(RunConfigError);
   });
 
+  it('rejects requested values above configured maxima before execution', () => {
+    expect(() => validateRunConfig({ requests: 11, maxRequests: 10 })).toThrow('requests (11) must not exceed maxRequests (10)');
+    expect(() => validateRunConfig({ concurrency: 6, maxConcurrency: 5 })).toThrow('concurrency (6) must not exceed maxConcurrency (5)');
+    expect(() => validateRunConfig({ durationSeconds: 21, maxDurationSeconds: 20 })).toThrow('durationSeconds (21) must not exceed maxDurationSeconds (20)');
+  });
+
+  it('does not start execution for relationally invalid configuration', async () => {
+    const fetcher = () => { throw new Error('execution must not start'); };
+    const output = await fs.mkdtemp(join(tmpdir(), 'performance-agent-'));
+    await expect(executeRun({ output, requests: 11, maxRequests: 10 }, { fetcher })).rejects.toThrow('must not exceed');
+    expect(await fs.readdir(output)).toEqual([]);
+  });
+
   it('accepts explicit configuration including the PER-25 scenario contract', () => {
     expect(validateRunConfig({
       baseUrl: 'http://127.0.0.1:3100', scenario: 'catalog', requests: 4, concurrency: 2,
