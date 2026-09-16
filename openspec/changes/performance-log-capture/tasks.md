@@ -51,11 +51,11 @@
 
 ## 6. Graphify integration — PER-29
 
-- [ ] 6.1 Document installation or invocation of `Graphify-Labs/graphify` for this repository.
-- [ ] 6.2 Generate the repository graph without changing product behavior.
+- [x] 6.1 Document installation or invocation of `Graphify-Labs/graphify` for this repository.
+- [x] 6.2 Generate the repository graph without changing product behavior.
 - [ ] 6.3 Run a reproducible query from the logging workflow to the search handler and intentional behavior.
 - [ ] 6.4 Save the query/result reference and connect it to the dashboard diagnosis.
-- [ ] 6.5 Add the unavailable-Graphify fallback and verify the report labels code evidence unavailable.
+- [x] 6.5 Add the unavailable-Graphify fallback and verify the report labels code evidence unavailable.
 
 ## 7. Playwright QA and video evidence — PER-30
 

@@ -14,3 +14,8 @@ The local `logging-agent` SHALL validate and summarize a completed run, use Grap
 #### Scenario: Context boundedness
 - **WHEN** the agent analyzes a large JSONL file
 - **THEN** scripts process the full file and the model receives summaries and selected examples rather than the entire log
+
+
+#### Scenario: Artifact validation
++- **WHEN** `config.json` is missing required fields, has malformed JSON, invalid types, unsupported values, or disagrees on `runId` with `summary.json`, `requests.jsonl`, or JSON `application.log` records
++- **THEN** the analyzer returns the documented non-zero incomplete-input exit code, reports source-attributed actionable validation issues, emits no derived findings, and never emits `status: "complete"`; requested `requests`, `concurrency`, and `durationSeconds` SHALL each be less than or equal to `maxRequests`, `maxConcurrency`, and `maxDurationSeconds`, respectively

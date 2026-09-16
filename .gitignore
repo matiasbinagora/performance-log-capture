@@ -12,3 +12,4 @@ playwright-report/
 playwright-artifacts/
 public/.qa-fixtures/
 runs/
+graphify-out/

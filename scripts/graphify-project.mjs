@@ -1,0 +1,274 @@
+#!/usr/bin/env node
+
+import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
+import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { basename, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
+
+const OUTPUT_DIR = "graphify-out";
+const CONTEXT_INDEX = "context-index.json";
+const MAX_FILE_BYTES = 1024 * 1024;
+const GRAPHIFY_BIN = process.env.GRAPHIFY_BIN || "graphify";
+
+const EXCLUDED_DIRS = new Set([".git", ".worktrees", "node_modules", "dist", "coverage", "test-results", OUTPUT_DIR]);
+const EXCLUDED_NAMES = [/^\.env(?:\..*)?$/i, /(?:secret|credential|token|password|private[-_]?key)/i];
+const INCLUDED_EXTENSIONS = new Set([
+  ".ts", ".tsx", ".js", ".mjs", ".cjs", ".json", ".jsonl", ".yaml", ".yml", ".toml", ".sql",
+  ".md", ".txt", ".rst", ".css", ".html", ".sh", ".dockerfile", ".conf", ".schema",
+]);
+const INCLUDED_NAMES = new Set(["AGENTS.md", "Dockerfile", ".gitignore"]);
+
+function fail(message, code = 1) {
+  console.error(`[graphify] ${message}`);
+  process.exitCode = code;
+}
+
+function graphifyVersion() {
+  const result = spawnSync(GRAPHIFY_BIN, ["--version"], { encoding: "utf8" });
+  if (result.status !== 0) return null;
+  return result.stdout.trim() || "unknown";
+}
+
+function isExcluded(name) {
+  return EXCLUDED_NAMES.some((pattern) => pattern.test(name));
+}
+
+function safeRelativePath(root, path) {
+  const rel = relative(root, path);
+  if (!rel || isAbsolute(rel) || rel === ".." || rel.startsWith(`..${sep}`)) return null;
+  return rel.split(sep).join("/");
+}
+
+function displayPath(root, path) {
+  return safeRelativePath(root, path) || "<outside-repository>";
+}
+
+function sanitizeUrl(url) {
+  return url
+    .replace(/\/\/[^\s/]+:[^\s/@]+@/i, "//[credentials-redacted]@")
+    .replace(/([?&](?:api[_-]?key|token|password|secret|credential|private[_-]?key)=)[^&#\s]*/gi, "$1[redacted]");
+}
+
+/*
+ * File locations are structured values, so an absolute value outside the
+ * repository is never retained, including extensionless values. Free-form
+ * content is handled separately below: route-shaped values are protected only
+ * when surrounding syntax identifies a route/endpoint, while ambiguous
+ * absolute values take the safe redacting path.
+ */
+function sanitizePath(pathToken, root) {
+  const trailing = pathToken.match(/[),.;]}]+$/)?.[0] || "";
+  const pathValue = trailing ? pathToken.slice(0, -trailing.length) : pathToken;
+  if (/^(?:~|\$HOME|\$\{HOME\})(?:[\\/]|$)/i.test(pathValue)) return `[home-path-redacted]${trailing}`;
+  if (/^[A-Za-z]:[\\/]/.test(pathValue)) return `[absolute-path-redacted]${trailing}`;
+  if (!pathValue.startsWith("/")) return pathToken;
+  const relativePath = safeRelativePath(root, resolve(pathValue));
+  if (relativePath) return `${relativePath}${trailing}`;
+  return `[absolute-path-redacted]${trailing}`;
+}
+
+function sanitizeFilePath(filePath, root) {
+  if (/[\\/]\.\.(?:[\\/]|$)/.test(filePath)) return "[traversal-path-redacted]";
+  if (isAbsolute(filePath)) return sanitizePath(filePath, root);
+  const relativePath = safeRelativePath(root, resolve(root, filePath));
+  return relativePath || "[relative-path-redacted]";
+}
+
+// A leading slash alone cannot distinguish a route from a filesystem path.
+// Explicit route provenance or an HTTP method permits any safe route grammar.
+// Free text needs positive endpoint evidence: parameter/wildcard segments,
+// a versioned API namespace, or conventional service endpoint names. Unknown
+// literal paths remain redacted. Filesystem roots and protected/traversal
+// segments take precedence, even when an HTTP method precedes the token.
+function isSafeRoute(value) {
+  value = value.split("?", 1)[0];
+  if (!/^\/(?:[A-Za-z0-9_-]+|:[A-Za-z][A-Za-z0-9_-]*|\{[A-Za-z][A-Za-z0-9_-]*\}|\*{1,2})(?:\/(?:[A-Za-z0-9_-]+|:[A-Za-z][A-Za-z0-9_-]*|\{[A-Za-z][A-Za-z0-9_-]*\}|\*{1,2}))*\/?$/.test(value)) return false;
+  if (/^\/(?:Users|private|var|tmp|srv|mnt|opt|home|etc|usr|root|Volumes|proc|sys|dev|run|bin|sbin|lib)(?:\/|$)/i.test(value)) return false;
+  return !value.split("/").some((part) => EXCLUDED_DIRS.has(part) || isExcluded(part));
+}
+
+function isLikelyRouteToken(value) {
+  if (!isSafeRoute(value)) return false;
+  return /(?:^|\/)(?::[A-Za-z][A-Za-z0-9_-]*|\{[A-Za-z][A-Za-z0-9_-]*\}|\*{1,2})(?:\/|$)/.test(value)
+    || /^\/(?:api|v\d+|healthz?|metrics|readyz?|livez?|status|graphql)(?:\/|$)/i.test(value);
+}
+
+function sanitizeStructuredValue(value, provenance, root) {
+  if (provenance === "filePath") return sanitizeFilePath(value, root);
+  if (provenance === "route") return isSafeRoute(value) ? sanitizeUrl(value) : sanitizeContent(value, root);
+  if (provenance === "url") return sanitizeUrl(value);
+  return sanitizeContent(value, root);
+}
+
+function sanitizeContent(content, root) {
+  let sanitized = content.replace(/-----BEGIN [^-]+-----[\s\S]*?-----END [^-]+-----/g, "[private-key-redacted]");
+  sanitized = sanitized.replace(/((?:api[_-]?key|token|password|secret|credential|private[_-]?key)\s*[:=]\s*)(?:\\?"(?:\\.|[^"\\])*\\?"|\\?'(?:\\.|[^'\\])*\\?'|[^\s,;}'"]+)/gi, "$1[redacted]");
+  // Match URL, route and filesystem candidates together: preserved values never
+  // pass through a second replacement, and input cannot forge placeholders.
+  // Backticks and Markdown link delimiters are boundaries, not token content.
+  const tokens = /\b(?:https?|ssh|git):\/\/[^\s"'`<>\[\](),;]+|(^|[\s"'`(=,:\[>])((?:~[\\/]|\$HOME[\\/]|\$\{HOME\}[\\/]|[A-Za-z]:[\\/]|\/)[^\s"'`<>\[\](),;]*)/g;
+  sanitized = sanitized.replace(tokens, (match, prefix, token, offset, input) => {
+    if (token === undefined) return sanitizeUrl(match);
+    // Preserve a balanced {parameter}; remove only prose punctuation.
+    let value = token.replace(/\.+$/, "");
+    while (value.endsWith("}") && (value.match(/}/g)?.length || 0) > (value.match(/{/g)?.length || 0)) value = value.slice(0, -1);
+    const suffix = token.slice(value.length);
+    if (/(?:^|[\\/])\.\.(?:[\\/]|$)/.test(value)) return `${prefix}[traversal-path-redacted]${suffix}`;
+    const method = /\b(?:GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS|TRACE)\s*$/i.test(input.slice(0, offset + prefix.length));
+    if ((method && isSafeRoute(value)) || isLikelyRouteToken(value)) return `${prefix}${sanitizeUrl(value)}${suffix}`;
+    return `${prefix}${sanitizePath(value, root)}${suffix}`;
+  });
+  sanitized = sanitized.replace(/(?:\.\.\/|\.\.\\)+/g, "[traversal-path-redacted]");
+  sanitized = sanitized.replace(/\$\\?\{?HOME\\?\}?/gi, "[home-variable-redacted]");
+  return sanitized;
+}
+
+function shouldIndex(path) {
+  const name = basename(path);
+  return INCLUDED_NAMES.has(name) || INCLUDED_EXTENSIONS.has(extname(name).toLowerCase());
+}
+
+function collectFiles(root, diagnostics) {
+  const files = [];
+  function visit(directory) {
+    for (const entry of readdirSync(directory, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+      if (EXCLUDED_DIRS.has(entry.name) || isExcluded(entry.name)) continue;
+      const path = join(directory, entry.name);
+      if (entry.isDirectory()) {
+        visit(path);
+      } else if (entry.isFile() && shouldIndex(path) && statSync(path).size <= MAX_FILE_BYTES) {
+        const relativePath = safeRelativePath(root, path);
+        if (relativePath) files.push({ path, relativePath });
+        else diagnostics.push({ path: "<excluded-outside-repository>", reason: "path is outside repository" });
+      }
+    }
+  }
+  visit(root);
+  return files;
+}
+
+function category(path) {
+  const rel = path.toLowerCase();
+  if (rel.includes("openspec")) return "openspec";
+  if (rel.includes("fixture") || rel.includes("runs/")) return "fixture";
+  if (basename(path).toLowerCase().startsWith("agents")) return "agent-instructions";
+  if ([".md", ".txt", ".rst"].includes(extname(path).toLowerCase())) return "documentation";
+  if ([".json", ".jsonl", ".yaml", ".yml", ".toml", ".schema", ".sql"].includes(extname(path).toLowerCase())) return "schema-or-config";
+  return "source";
+}
+
+function buildContextIndex(root) {
+  const diagnostics = [];
+  const files = collectFiles(root, diagnostics).map(({ path, relativePath }) => {
+    const content = sanitizeContent(readFileSync(path, "utf8"), root);
+    return {
+      path: relativePath,
+      category: category(path),
+      sha256: createHash("sha256").update(content).digest("hex"),
+      lines: content.split(/\r?\n/).length,
+      content,
+    };
+  });
+  const output = join(root, OUTPUT_DIR);
+  mkdirSync(output, { recursive: true });
+  writeFileSync(join(output, CONTEXT_INDEX), `${JSON.stringify({ version: 1, files, diagnostics }, null, 2)}\n`);
+  return files;
+}
+
+function build(root) {
+  const version = graphifyVersion();
+  if (!version) {
+    fail(`Graphify is unavailable (expected '${basename(GRAPHIFY_BIN)}' on PATH). code evidence unavailable`, 2);
+    return;
+  }
+  const result = spawnSync(GRAPHIFY_BIN, ["extract", ".", "--code-only", "--no-cluster", "--out", "."], {
+    cwd: root,
+    encoding: "utf8",
+    stdio: "pipe",
+  });
+  process.stdout.write(sanitizeContent(result.stdout || "", root));
+  process.stderr.write(sanitizeContent(result.stderr || "", root));
+  if (result.status !== 0 || !existsSync(join(root, OUTPUT_DIR, "graph.json"))) {
+    fail(`Graphify could not build the deterministic code graph (exit ${result.status ?? "unknown"}). code evidence unavailable`, 2);
+    return;
+  }
+  const files = buildContextIndex(root);
+  console.log(`[graphify] context index updated: ${files.length} protected project files`);
+  console.log(`[graphify] graph: ${displayPath(root, join(root, OUTPUT_DIR, "graph.json"))}`);
+  console.log(`[graphify] context search index: ${displayPath(root, join(root, OUTPUT_DIR, CONTEXT_INDEX))}`);
+  console.log(`[graphify] version: ${version}`);
+}
+
+function loadIndex(root) {
+  const path = join(root, OUTPUT_DIR, CONTEXT_INDEX);
+  if (!existsSync(path)) {
+    fail(`index is missing at ${displayPath(root, path)}; run 'npm run graphify:index' first`, 2);
+    return null;
+  }
+  return JSON.parse(readFileSync(path, "utf8"));
+}
+
+function search(root, query) {
+  const index = loadIndex(root);
+  if (!index) return;
+  if (!graphifyVersion()) {
+    fail(`Graphify is unavailable (expected '${basename(GRAPHIFY_BIN)}' on PATH). code evidence unavailable`, 2);
+    return;
+  }
+  const graph = join(root, OUTPUT_DIR, "graph.json");
+  if (!existsSync(graph)) {
+    fail(`Graphify graph is missing at ${displayPath(root, graph)}; run 'npm run graphify:index' first`, 2);
+    return;
+  }
+  const terms = query.toLowerCase().split(/[^a-z0-9_/-]+/).filter(Boolean);
+  if (!terms.length) return fail("search query must contain at least one word");
+  const matches = index.files.map((file) => {
+    const lower = file.content.toLowerCase();
+    const score = terms.reduce((total, term) => total + (lower.includes(term) ? 1 : 0), 0);
+    const line = terms.map((term) => lower.indexOf(term)).filter((value) => value >= 0).sort((a, b) => a - b)[0];
+    const lineNumber = line === undefined ? 1 : file.content.slice(0, line).split(/\r?\n/).length;
+    return { file, score, lineNumber };
+  }).filter((match) => match.score > 0).sort((a, b) => b.score - a.score || a.file.path.localeCompare(b.file.path));
+  console.log(`Query: ${sanitizeContent(query, root)}`);
+  console.log(`Graphify graph: ${displayPath(root, graph)}`);
+  console.log(`Context matches: ${matches.length}`);
+  for (const { file, score, lineNumber } of matches.slice(0, 10)) {
+    const excerpt = file.content.split(/\r?\n/)[lineNumber - 1]?.trim().slice(0, 180) || "";
+    console.log(`- [${file.category}] ${file.path}:${lineNumber} (terms=${score}) ${excerpt}`);
+  }
+  const graphResult = spawnSync(GRAPHIFY_BIN, ["query", query, "--graph", graph], { cwd: root, encoding: "utf8" });
+  if (graphResult.status === 0) {
+    console.log("\nGraphify structural query:");
+    process.stdout.write(sanitizeContent(graphResult.stdout, root));
+  } else {
+    console.error("\n[graphify] structural query unavailable; deterministic context matches remain available");
+  }
+}
+
+function inspect(root) {
+  const index = loadIndex(root);
+  if (!index) return;
+  const graphPath = join(root, OUTPUT_DIR, "graph.json");
+  if (!existsSync(graphPath)) return fail(`Graphify graph is missing at ${displayPath(root, graphPath)}; run 'npm run graphify:index' first`, 2);
+  const graph = JSON.parse(readFileSync(graphPath, "utf8"));
+  console.log(JSON.stringify({
+    graphifyVersion: graphifyVersion(),
+    graph: { path: relative(root, graphPath), nodes: graph.nodes?.length ?? 0, edges: graph.edges?.length ?? 0 },
+    context: { path: relative(root, join(root, OUTPUT_DIR, CONTEXT_INDEX)), files: index.files.length, byCategory: index.files.reduce((counts, file) => ({ ...counts, [file.category]: (counts[file.category] || 0) + 1 }), {}) },
+    excluded: [...EXCLUDED_DIRS, ".env files", "secret-like filenames", "files larger than 1 MiB", "unsupported/binary files"],
+  }, null, 2));
+}
+
+const [command, ...args] = process.argv.slice(2);
+const root = resolve(process.env.GRAPHIFY_ROOT || ".");
+if (resolve(process.argv[1] || "") === fileURLToPath(import.meta.url)) {
+  if (!existsSync(root)) fail("project root does not exist");
+  else if (command === "index") build(root);
+  else if (command === "search") search(root, args.join(" "));
+  else if (command === "inspect") inspect(root);
+  else fail("usage: graphify-project.mjs index | search <query> | inspect");
+}
+
+
+export { isLikelyRouteToken, safeRelativePath, sanitizeContent, sanitizeStructuredValue };
