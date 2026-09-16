@@ -27,11 +27,31 @@ jobs:
       - name: Build dashboard image
         run: docker build --tag per-30-dashboard:${{ github.sha }} .
       - name: Start dashboard server
-        run: docker run --detach --name per-30-dashboard --publish 4173:3000 per-30-dashboard:${{ github.sha }}
-      - run: |
-          curl --fail --silent --show-error --retry 30 --retry-delay 1 --retry-connrefused \
-            http://127.0.0.1:4173/health
+        run: |
+          mkdir -p playwright-artifacts
+          docker run --detach --name per-30-dashboard --publish 4173:3000 per-30-dashboard:${{ github.sha }}
+      - id: readiness
+        name: Wait for dashboard readiness
+        run: |
+          mkdir -p playwright-artifacts
+          for attempt in $(seq 1 30); do
+            running=$(docker inspect --format '{{.State.Running}}' per-30-dashboard 2>/dev/null || echo false)
+            if [ "$running" != "true" ]; then
+              echo "Dashboard container stopped before readiness (attempt $attempt)." >&2
+              docker inspect per-30-dashboard > playwright-artifacts/container-inspect.json 2>&1 || true
+              docker logs per-30-dashboard > playwright-artifacts/server.log 2>&1 || true
+              exit 1
+            fi
+            if curl --fail --silent --show-error --max-time 3 http://127.0.0.1:4173/health; then
+              echo "Dashboard is ready on host port 4173 (container port 3000)."
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Dashboard did not become ready after 30 attempts." >&2
+          exit 1
       - name: Run Playwright and write metadata
+        if: steps.readiness.outcome == 'success'
         env:
           PLAYWRIGHT_EXTERNAL_SERVER: true
           PLAYWRIGHT_COMMAND: npm run test:e2e
@@ -44,7 +64,13 @@ jobs:
           exit "$status"
       - if: always()
         name: Collect server logs
-        run: docker logs per-30-dashboard > playwright-artifacts/server.log 2>&1 || true
+        run: |
+          mkdir -p playwright-artifacts
+          docker ps -a > playwright-artifacts/docker-ps-a.txt 2>&1 || true
+          docker inspect per-30-dashboard > playwright-artifacts/container-inspect.json 2>&1 || true
+          docker inspect --format 'running={{.State.Running}} status={{.State.Status}} exit_code={{.State.ExitCode}} started={{.State.StartedAt}} finished={{.State.FinishedAt}}' per-30-dashboard > playwright-artifacts/container-status.txt 2>&1 || true
+          docker inspect --format '{{if .State.Health}}{{json .State.Health}}{{else}}healthcheck=not-configured{{end}}' per-30-dashboard > playwright-artifacts/docker-health.json 2>&1 || true
+          docker logs per-30-dashboard > playwright-artifacts/server.log 2>&1 || true
       - if: always()
         name: Stop dashboard server
         run: docker rm --force per-30-dashboard || true
