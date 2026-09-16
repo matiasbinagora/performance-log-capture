@@ -13,6 +13,7 @@ jobs:
     timeout-minutes: 15
     env:
       CI: true
+      PLAYWRIGHT_BASE_URL: http://127.0.0.1:4173
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -23,9 +24,13 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - run: npm run build
       - run: node scripts/prepare-playwright-fixture.mjs
-      - run: docker compose up --build -d
+      - name: Build dashboard image
+        run: docker build --tag per-30-dashboard:${{ github.sha }} .
+      - name: Start dashboard server
+        run: docker run --detach --name per-30-dashboard --publish 4173:3000 per-30-dashboard:${{ github.sha }}
       - run: |
-          curl --fail --retry 20 --retry-delay 1 http://127.0.0.1:3000/health
+          curl --fail --silent --show-error --retry 30 --retry-delay 1 --retry-connrefused \
+            http://127.0.0.1:4173/health
       - name: Run Playwright and write metadata
         env:
           PLAYWRIGHT_EXTERNAL_SERVER: true
@@ -38,7 +43,11 @@ jobs:
           node scripts/write-playwright-metadata.mjs "$status"
           exit "$status"
       - if: always()
-        run: docker compose down
+        name: Collect server logs
+        run: docker logs per-30-dashboard > playwright-artifacts/server.log 2>&1 || true
+      - if: always()
+        name: Stop dashboard server
+        run: docker rm --force per-30-dashboard || true
       - if: always()
         uses: actions/upload-artifact@v4
         with:
