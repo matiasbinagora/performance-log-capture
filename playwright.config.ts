@@ -19,9 +19,9 @@ export default defineConfig({
   use: {
     baseURL: process.env.PLAYWRIGHT_BASE_URL ?? 'http://127.0.0.1:4173',
     browserName: 'chromium',
-    trace: 'retain-on-failure',
+    trace: 'on',
     video: 'on',
-    screenshot: 'only-on-failure',
+    screenshot: 'on',
     ...devices['Desktop Chrome'],
   },
   ...(process.env.PLAYWRIGHT_EXTERNAL_SERVER ? {} : { webServer: localServer }),

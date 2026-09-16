@@ -4,6 +4,15 @@ PER-30 runs deterministic browser checks against the local catalog server and
 the standalone PER-28 dashboard. No external services, credentials, or
 network data are used by the tests.
 
+## Branch dependency
+
+PER-30 consumes the standalone dashboard implementation from PER-28. Until
+PER-28 is merged, the PER-30 pull request is intentionally stacked on
+`feature/per-28-standalone-dashboard`; `src/dashboard/dashboard.ts` and its
+dashboard unit tests are supplied by the base branch, not by the PER-30
+change. The PR must not be presented as independently mergeable into `main`
+before PER-28 is merged.
+
 ## Local execution
 
 Install dependencies and the Chromium browser once:
@@ -36,8 +45,8 @@ policies can restrict local-file navigation.
 
 ## Evidence
 
-Playwright writes videos for every test under `test-results/`, screenshots on
-failure, and traces on failure or retry. The HTML report is written to
+Playwright writes videos, screenshots, and traces for every test under
+`test-results/`. The HTML report is written to
 `playwright-report/` and can be opened with `npx playwright show-report`.
 These generated paths are ignored by Git.
 
