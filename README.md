@@ -145,6 +145,49 @@ category such as `desk` or `office`, then select **View details**. The page
 uses same-origin API requests and visibly reports loading, empty, and error
 states without external services.
 
+## Standalone performance dashboard
+
+Generate the offline report from the JSON output of the PER-27 analyzer:
+
+```bash
+npm run dashboard:generate -- --input runs/<run-id>/<run-id>-analysis.json \
+  --output runs/<run-id>/dashboard.html
+```
+
+For the deterministic demo fixture:
+
+```bash
+npm run dashboard:generate -- --input fixtures/dashboard-analysis.json \
+  --output /tmp/performance-dashboard.html
+open /tmp/performance-dashboard.html
+```
+
+The input contract is PER-27 analysis JSON with `schemaVersion: 1`, `status`,
+`runId`, `facts`, `metrics`, `examples`, `issues`, `derivedFindings`,
+`hypotheses`, and `graphify`. Raw counts and distributions are shown separately
+from analyzer findings. Optional `config.commit` and `config.scenario` values
+are shown as metadata; missing values are displayed as “not provided”. The
+validator also checks artifact relationships, run identity, types, totals,
+distributions, and metric consistency before generating the report.
+
+The generated artifact is one HTML file with inline CSS, JavaScript, and SVG.
+It opens directly from the filesystem without a server, build step, CDN, or
+network connection. Latency is in milliseconds and throughput is requests per
+second. Status-code and error chips provide exact counts behind the charts.
+
+Complete reports show measured metrics and derived findings. Incomplete reports
+show warnings, interruption/timeout state, and source issues while omitting
+derived conclusions. Invalid JSON/schema input produces a visible unavailable
+state and the CLI exits `2`; complete and incomplete documents write an artifact
+and exit `0`. Unexpected filesystem failures exit `1`. Input values are escaped
+before insertion into the page.
+
+Known limitations: PER-27 currently provides aggregate metrics rather than
+per-request time-series data. When timestamped `metrics.timeSeries` observations
+are absent, time-series visuals show an explicit insufficient-data state rather
+than an invented trend. Graphify is a later PER-29 integration; unavailable code
+evidence is shown explicitly and is never turned into a root-cause claim.
+
 ## Performance scenario configuration
 
 The application reads these optional environment variables. Defaults are

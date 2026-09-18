@@ -8,7 +8,7 @@
   },
   "scripts": {
     "dev": "tsx watch src/server.ts",
-    "lint": "eslint src scripts/performance-run.ts tests vitest.config.ts",
+    "lint": "eslint src scripts/performance-dashboard.ts scripts/performance-run.ts tests vitest.config.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "performance:run": "tsx scripts/performance-run.ts",
@@ -19,7 +19,8 @@
     "graphify:inspect": "node scripts/graphify-project.mjs inspect",
     "log-analysis": "tsx scripts/log-analysis.ts",
     "start": "node dist/server.js",
-    "openspec:validate": "openspec validate performance-log-capture --strict"
+    "openspec:validate": "openspec validate performance-log-capture --strict",
+    "dashboard:generate": "tsx scripts/performance-dashboard.ts"
   },
   "dependencies": {
     "@fastify/static": "^10.1.3",
