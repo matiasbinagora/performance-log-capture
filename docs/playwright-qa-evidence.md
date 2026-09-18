@@ -51,12 +51,19 @@ Playwright writes videos, screenshots, and traces for every test under
 These generated paths are ignored by Git.
 
 CI also writes `playwright-artifacts/run-metadata.json`, recording the commit,
-Chromium, command, and numeric test result. The workflow builds and starts the
-Docker Compose application before running the suite; local execution uses the
-same compiled application contract through the Playwright-managed HTTP server.
+Chromium, command, and numeric test result. The workflow derives one canonical
+commit value as `${{ github.event.pull_request.head.sha || github.sha }}` and
+passes it as `PLAYWRIGHT_COMMIT`. Pull-request runs therefore use the actual PR
+head SHA, while push or other non-pull-request runs use `github.sha`. The
+metadata writer requires that explicit value and rejects missing or malformed
+SHAs; it never falls back to `GITHUB_SHA` or a local placeholder. The Docker tag,
+artifact filename, and metadata all use this same canonical SHA. The workflow
+builds and starts the Docker Compose application before running the suite; local
+execution uses the same compiled application contract through the
+Playwright-managed HTTP server.
 
 On pull requests or manual dispatch, GitHub Actions uploads both directories
-as `PER-30-playwright-evidence-<commit SHA>` with a 14-day retention period.
+as `PER-30-playwright-evidence-<canonical commit SHA>` with a 14-day retention period.
 The GitHub connector exposes Actions artifacts, not inline PR/Linear media
 embedding; the canonical artifact URL must therefore be posted in the PR and
 Linear handoff comments for playback.

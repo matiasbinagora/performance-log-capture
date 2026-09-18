@@ -14,6 +14,7 @@ jobs:
     env:
       CI: true
       PLAYWRIGHT_BASE_URL: http://127.0.0.1:4173
+      PLAYWRIGHT_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -29,11 +30,11 @@ jobs:
           mkdir -p playwright-report test-results playwright-artifacts
           node scripts/write-playwright-metadata.mjs pending
       - name: Build dashboard image
-        run: docker build --tag per-30-dashboard:${{ github.sha }} .
+        run: docker build --tag per-30-dashboard:${PLAYWRIGHT_COMMIT} .
       - name: Start dashboard server
         run: |
           mkdir -p playwright-artifacts
-          docker run --detach --name per-30-dashboard --publish 4173:3000 per-30-dashboard:${{ github.sha }}
+          docker run --detach --name per-30-dashboard --publish 4173:3000 per-30-dashboard:${PLAYWRIGHT_COMMIT}
       - id: readiness
         name: Wait for dashboard readiness
         run: |
@@ -82,7 +83,7 @@ jobs:
       - if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: PER-30-playwright-evidence-${{ github.sha }}
+          name: PER-30-playwright-evidence-${{ env.PLAYWRIGHT_COMMIT }}
           path: |
             playwright-report/
             test-results/
