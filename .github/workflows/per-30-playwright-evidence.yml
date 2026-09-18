@@ -24,6 +24,10 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - run: npm run build
       - run: node scripts/prepare-playwright-fixture.mjs
+      - name: Initialize evidence collection
+        run: |
+          mkdir -p playwright-report test-results playwright-artifacts
+          node scripts/write-playwright-metadata.mjs pending
       - name: Build dashboard image
         run: docker build --tag per-30-dashboard:${{ github.sha }} .
       - name: Start dashboard server
@@ -56,16 +60,17 @@ jobs:
           PLAYWRIGHT_EXTERNAL_SERVER: true
           PLAYWRIGHT_COMMAND: npm run test:e2e
         run: |
+          mkdir -p playwright-report test-results playwright-artifacts
           node scripts/write-playwright-metadata.mjs pending
           set +e
-          npm run test:e2e
-          status=$?
+          npm run test:e2e 2>&1 | tee playwright-artifacts/test-output.txt
+          status=${PIPESTATUS[0]}
           node scripts/write-playwright-metadata.mjs "$status"
           exit "$status"
       - if: always()
         name: Collect server logs
         run: |
-          mkdir -p playwright-artifacts
+          mkdir -p playwright-report test-results playwright-artifacts
           docker ps -a > playwright-artifacts/docker-ps-a.txt 2>&1 || true
           docker inspect per-30-dashboard > playwright-artifacts/container-inspect.json 2>&1 || true
           docker inspect --format 'running={{.State.Running}} status={{.State.Status}} exit_code={{.State.ExitCode}} started={{.State.StartedAt}} finished={{.State.FinishedAt}}' per-30-dashboard > playwright-artifacts/container-status.txt 2>&1 || true
