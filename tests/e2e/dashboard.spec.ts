@@ -1,6 +1,10 @@
 import { expect, test } from '@playwright/test';
 
 test.describe('PER-30 local catalog and dashboard evidence', () => {
+  test.afterEach(async ({ page }, testInfo) => {
+    await page.screenshot({ path: testInfo.outputPath('final-state.png'), fullPage: true });
+  });
+
   test('renders the deterministic catalog, search, detail, and error states', async ({ page }) => {
     await page.goto('/');
     await expect(page.getByRole('heading', { name: 'Local Catalog' })).toBeVisible();
