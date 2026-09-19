@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "diagramType": "sequence",
+  "title": "Manual demo sequence · run to release evidence",
+  "subtitle": "Every handoff is explicit: the human activates agents, artifacts carry evidence, and release remains a human decision.",
+  "description": "Manual sequence from performance-agent activation through generated run artifacts, logging analysis, Graphify context, offline dashboard, Playwright evidence, GitHub and Linear publication, and final human review.",
+  "evidenceBoundary": "Solid green messages correspond to documented commands, generated artifacts, tests, or workflow configuration. Dashed amber messages explain the narrated manual handoff between independent local tools; no automatic agent-to-agent or tracker mutation is implied.",
+  "requiredIds": ["human-start", "performance-agent", "catalog-api", "artifacts", "logging-agent", "graphify", "dashboard", "playwright", "handoff", "human-release"],
+  "participants": [
+    { "id": "human-start", "label": "Human operator", "detail": "manual activation", "x": 106 },
+    { "id": "performance-agent", "label": "performance-agent", "detail": "load runner", "x": 300 },
+    { "id": "catalog-api", "label": "Catalog / API", "detail": "local app", "x": 494 },
+    { "id": "artifacts", "label": "Run artifacts", "detail": "runs/<run-id>/", "x": 688 },
+    { "id": "logging-agent", "label": "logging-agent", "detail": "streaming analysis", "x": 882 },
+    { "id": "graphify", "label": "Graphify", "detail": "local index/search", "x": 1076 },
+    { "id": "dashboard", "label": "Dashboard", "detail": "offline HTML", "x": 1270 },
+    { "id": "playwright", "label": "Playwright QA", "detail": "browser evidence", "x": 1464 },
+    { "id": "handoff", "label": "GitHub + Linear", "detail": "evidence publication", "x": 1600 },
+    { "id": "human-release", "label": "Human reviewer", "detail": "release decision", "x": 1770 }
+  ],
+  "messages": [
+    { "step": "01", "from": "human-start", "to": "performance-agent", "y": 150, "label": "invoke with run prompt", "kind": "inference" },
+    { "step": "02", "from": "performance-agent", "to": "catalog-api", "y": 230, "label": "check /health + send load", "kind": "direct" },
+    { "step": "03", "from": "catalog-api", "to": "performance-agent", "y": 300, "label": "responses + request events", "kind": "direct", "return": true },
+    { "step": "04", "from": "performance-agent", "to": "artifacts", "y": 370, "label": "write config, JSONL, log, summary", "kind": "direct" },
+    { "step": "05", "from": "performance-agent", "to": "human-start", "y": 440, "label": "print run path + next command", "kind": "inference", "return": true },
+    { "step": "06", "from": "human-start", "to": "logging-agent", "y": 510, "label": "invoke with run directory", "kind": "inference" },
+    { "step": "07", "from": "logging-agent", "to": "artifacts", "y": 580, "label": "validate + stream records", "kind": "direct" },
+    { "step": "08", "from": "logging-agent", "to": "graphify", "y": 650, "label": "index / search code context", "kind": "direct" },
+    { "step": "09", "from": "graphify", "to": "logging-agent", "y": 720, "label": "source references or unavailable", "kind": "direct", "return": true },
+    { "step": "10", "from": "logging-agent", "to": "dashboard", "y": 790, "label": "write analysis JSON + HTML path", "kind": "direct" },
+    { "step": "11", "from": "human-start", "to": "playwright", "y": 850, "label": "open dashboard + run QA", "kind": "inference" },
+    { "step": "12", "from": "playwright", "to": "dashboard", "y": 900, "label": "assert charts + incomplete state", "kind": "direct", "return": true },
+    { "step": "13", "from": "playwright", "to": "handoff", "y": 950, "label": "publish video + metadata", "kind": "direct" },
+    { "step": "14", "from": "handoff", "to": "human-release", "y": 1000, "label": "PR/task evidence ready", "kind": "inference" }
+  ],
+  "references": [
+    { "path": ".codex/agents/performance-agent.md", "kind": "direct", "note": "activation and stop rules" },
+    { "path": "scripts/performance-run.ts", "kind": "direct", "note": "run command" },
+    { "path": "src/performance/runner.ts", "kind": "direct", "note": "artifact writer" },
+    { "path": "runs/<run-id>/config.json", "kind": "direct", "note": "generated convention; not committed" },
+    { "path": "runs/<run-id>/requests.jsonl", "kind": "direct", "note": "generated convention; not committed" },
+    { "path": ".codex/agents/logging-agent.md", "kind": "direct", "note": "analysis handoff" },
+    { "path": "scripts/log-analysis.ts", "kind": "direct", "note": "analysis CLI" },
+    { "path": "docs/graphify-demo.md", "kind": "direct", "note": "index/search commands" },
+    { "path": "scripts/graphify-project.mjs", "kind": "direct", "note": "deterministic local search" },
+    { "path": "scripts/performance-dashboard.ts", "kind": "direct", "note": "dashboard generation" },
+    { "path": "tests/e2e/dashboard.spec.ts", "kind": "direct", "note": "catalog and dashboard scenarios" },
+    { "path": "docs/playwright-qa-evidence.md", "kind": "direct", "note": "video and metadata publication" },
+    { "path": ".github/workflows/per-30-playwright-evidence.yml", "kind": "direct", "note": "CI evidence workflow" },
+    { "path": "openspec/changes/performance-log-capture/specs/archify-documentation/spec.md", "kind": "direct", "note": "PER-31 contract" }
+  ]
+}
