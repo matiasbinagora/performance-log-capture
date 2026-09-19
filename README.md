@@ -187,6 +187,11 @@ per-request time-series data. When timestamped `metrics.timeSeries` observations
 are absent, time-series visuals show an explicit insufficient-data state rather
 than an invented trend. Graphify is a later PER-29 integration; unavailable code
 evidence is shown explicitly and is never turned into a root-cause claim.
+Every completed request emits one JSON object per line to standard output with
+`runId`, a unique per-run `requestId`, `operation`, HTTP `status`, measured
+`duration`, ISO `timestamp`, and `errorCode` when applicable. Search failures
+return HTTP 503 with `SEARCH_SIMULATED_ERROR`. These events can be redirected
+to a file for a future performance run without a database or external service.
 
 ## Performance scenario configuration
 

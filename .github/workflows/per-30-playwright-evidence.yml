@@ -1,0 +1,92 @@
+name: PER-30 Playwright evidence
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  playwright:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CI: true
+      PLAYWRIGHT_BASE_URL: http://127.0.0.1:4173
+      PLAYWRIGHT_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run build
+      - run: node scripts/prepare-playwright-fixture.mjs
+      - name: Initialize evidence collection
+        run: |
+          mkdir -p playwright-report test-results playwright-artifacts
+          node scripts/write-playwright-metadata.mjs pending
+      - name: Build dashboard image
+        run: docker build --tag per-30-dashboard:${PLAYWRIGHT_COMMIT} .
+      - name: Start dashboard server
+        run: |
+          mkdir -p playwright-artifacts
+          docker run --detach --name per-30-dashboard --publish 4173:3000 per-30-dashboard:${PLAYWRIGHT_COMMIT}
+      - id: readiness
+        name: Wait for dashboard readiness
+        run: |
+          mkdir -p playwright-artifacts
+          for attempt in $(seq 1 30); do
+            running=$(docker inspect --format '{{.State.Running}}' per-30-dashboard 2>/dev/null || echo false)
+            if [ "$running" != "true" ]; then
+              echo "Dashboard container stopped before readiness (attempt $attempt)." >&2
+              docker inspect per-30-dashboard > playwright-artifacts/container-inspect.json 2>&1 || true
+              docker logs per-30-dashboard > playwright-artifacts/server.log 2>&1 || true
+              exit 1
+            fi
+            if curl --fail --silent --show-error --max-time 3 http://127.0.0.1:4173/health; then
+              echo "Dashboard is ready on host port 4173 (container port 3000)."
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Dashboard did not become ready after 30 attempts." >&2
+          exit 1
+      - name: Run Playwright and write metadata
+        if: steps.readiness.outcome == 'success'
+        env:
+          PLAYWRIGHT_EXTERNAL_SERVER: true
+          PLAYWRIGHT_COMMAND: npm run test:e2e
+        run: |
+          mkdir -p playwright-report test-results playwright-artifacts
+          node scripts/write-playwright-metadata.mjs pending
+          set +e
+          npm run test:e2e 2>&1 | tee playwright-artifacts/test-output.txt
+          status=${PIPESTATUS[0]}
+          node scripts/write-playwright-metadata.mjs "$status"
+          exit "$status"
+      - if: always()
+        name: Collect server logs
+        run: |
+          mkdir -p playwright-report test-results playwright-artifacts
+          docker ps -a > playwright-artifacts/docker-ps-a.txt 2>&1 || true
+          docker inspect per-30-dashboard > playwright-artifacts/container-inspect.json 2>&1 || true
+          docker inspect --format 'running={{.State.Running}} status={{.State.Status}} exit_code={{.State.ExitCode}} started={{.State.StartedAt}} finished={{.State.FinishedAt}}' per-30-dashboard > playwright-artifacts/container-status.txt 2>&1 || true
+          docker inspect --format '{{if .State.Health}}{{json .State.Health}}{{else}}healthcheck=not-configured{{end}}' per-30-dashboard > playwright-artifacts/docker-health.json 2>&1 || true
+          docker logs per-30-dashboard > playwright-artifacts/server.log 2>&1 || true
+      - if: always()
+        name: Stop dashboard server
+        run: docker rm --force per-30-dashboard || true
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: PER-30-playwright-evidence-${{ env.PLAYWRIGHT_COMMIT }}
+          path: |
+            playwright-report/
+            test-results/
+            playwright-artifacts/
+          if-no-files-found: warn
+          retention-days: 14
