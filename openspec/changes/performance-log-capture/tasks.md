@@ -20,34 +20,34 @@
 
 ## 3. Performance run artifacts — PER-26
 
-- [ ] 3.1 Define the run configuration, request event, summary, and incomplete-run schemas.
-- [ ] 3.2 Implement a streaming load runner with gradual ramp-up and the default 60-second/20,000-request profile.
-- [ ] 3.3 Create a unique `runs/<run-id>/` directory without overwriting previous runs.
-- [ ] 3.4 Persist `config.json`, `requests.jsonl`, `application.log`, and `summary.json` for completed runs.
-- [ ] 3.5 Calculate actual counts, operation distribution, duration, error rate, average, p50, p95, p99, and maximum latency.
-- [ ] 3.6 Mark interrupted or incomplete runs as `incomplete` and prevent them from being reported as passing.
-- [ ] 3.7 Create the local Codex `performance-agent` instructions in English with prerequisites, stop rules, and handoff command.
-- [ ] 3.8 Execute two runs and verify unique IDs, preserved artifacts, and correct summary values.
+- [x] 3.1 Define the run configuration, request event, summary, and incomplete-run schemas.
+- [x] 3.2 Implement a streaming load runner with gradual ramp-up and the default 60-second/20,000-request profile.
+- [x] 3.3 Create a unique `runs/<run-id>/` directory without overwriting previous runs.
+- [x] 3.4 Persist `config.json`, `requests.jsonl`, `application.log`, and `summary.json` for completed runs.
+- [x] 3.5 Calculate actual counts, operation distribution, duration, error rate, average, p50, p95, p99, and maximum latency.
+- [x] 3.6 Mark interrupted or incomplete runs as `incomplete` and prevent them from being reported as passing.
+- [x] 3.7 Create the local Codex `performance-agent` instructions in English with prerequisites, stop rules, and handoff command.
+- [x] 3.8 Execute two runs and verify unique IDs, preserved artifacts, and correct summary values.
 
 ## 4. Log analysis pipeline — PER-27
 
-- [ ] 4.1 Implement streaming parsers and schema validation for complete run artifacts.
-- [ ] 4.2 Implement metric aggregation by operation and overall run.
-- [ ] 4.3 Select representative success, slow, and error examples without loading the complete log into model context.
-- [ ] 4.4 Implement incomplete-input handling that reports missing or malformed files without invented conclusions.
-- [ ] 4.5 Create the local Codex `logging-agent` instructions in English with input, commands, evidence rules, and output contract.
-- [ ] 4.6 Add the Graphify query handoff for the search handler, delay, and error branch.
-- [ ] 4.7 Analyze complete and incomplete fixtures and record stable output evidence for PER-27.
+- [x] 4.1 Implement streaming parsers and schema validation for complete run artifacts.
+- [x] 4.2 Implement metric aggregation by operation and overall run.
+- [x] 4.3 Select representative success, slow, and error examples without loading the complete log into model context.
+- [x] 4.4 Implement incomplete-input handling that reports missing or malformed files without invented conclusions.
+- [x] 4.5 Create the local Codex `logging-agent` instructions in English with input, commands, evidence rules, and output contract.
+- [x] 4.6 Add the Graphify query handoff for the search handler, delay, and error branch.
+- [x] 4.7 Analyze complete and incomplete fixtures and record stable output evidence for PER-27.
 
 ## 5. Standalone dashboard — PER-28
 
-- [ ] 5.1 Define the report data contract between `summary.json`, analysis output, and HTML generation.
-- [ ] 5.2 Implement evidence-first layout with headline metrics and plain-English user impact.
-- [ ] 5.3 Add charts for latency over time, detail versus search, success versus failure, and errors over time.
-- [ ] 5.4 Add operation table, selected log examples, Graphify references, run metadata, and analyzed commit.
-- [ ] 5.5 Bundle or inline all chart assets so the report has no runtime network dependency.
-- [ ] 5.6 Render an explicit incomplete state when source data is incomplete or code evidence is unavailable.
-- [ ] 5.7 Add fixture tests for representative displayed values and open the report from the filesystem.
+- [x] 5.1 Define the report data contract between `summary.json`, analysis output, and HTML generation.
+- [x] 5.2 Implement evidence-first layout with headline metrics and plain-English user impact.
+- [x] 5.3 Add charts for latency over time, detail versus search, success versus failure, and errors over time.
+- [x] 5.4 Add operation table, selected log examples, Graphify references, run metadata, and analyzed commit.
+- [x] 5.5 Bundle or inline all chart assets so the report has no runtime network dependency.
+- [x] 5.6 Render an explicit incomplete state when source data is incomplete or code evidence is unavailable.
+- [x] 5.7 Add fixture tests for representative displayed values and open the report from the filesystem.
 
 ## 6. Graphify integration — PER-29
 
@@ -78,21 +78,21 @@
 
 ## 9. Demo runbook — PER-32
 
-- [ ] 9.1 Document clean setup, Docker start, browser check, and default load profile.
-- [ ] 9.2 Add the exact English prompt and expected output for `performance-agent`.
-- [ ] 9.3 Add the exact English prompt and expected output for `logging-agent`.
-- [ ] 9.4 Document run reset, interrupted-run recovery, and dashboard opening.
-- [ ] 9.5 Document where to show Linear stories, GitHub code, Graphify output, and Archify diagrams.
-- [ ] 9.6 Execute the runbook from a clean local state and fix ambiguous steps.
+- [x] 9.1 Document clean setup, Docker start, browser check, and default load profile.
+- [x] 9.2 Add the exact English prompt and expected output for `performance-agent`.
+- [x] 9.3 Add the exact English prompt and expected output for `logging-agent`.
+- [x] 9.4 Document run reset, interrupted-run recovery, and dashboard opening.
+- [x] 9.5 Document where to show Linear stories, GitHub code, Graphify output, and Archify diagrams.
+- [x] 9.6 Execute the runbook from a clean local state and fix ambiguous steps.
 
 ## 10. OpenSpec and Linear traceability — PER-33
 
-- [ ] 10.1 Link each Linear story PER-24 through PER-33 to this OpenSpec change and its capability spec.
-- [ ] 10.2 Keep implementation tasks and acceptance criteria synchronized with the approved design.
-- [ ] 10.3 Verify the real Linear workflow mapping: Backlog, Todo, In Progress, In Review, and Done.
-- [ ] 10.4 Document that the orchestrator recommends Todo, developers implement in In Progress, reviewers use In Review, and the user owns Done and merge.
-- [ ] 10.5 Run OpenSpec validation before the first implementation handoff and before review handoffs.
-- [ ] 10.6 Preserve completion evidence and next steps in the corresponding Linear task comments.
+- [x] 10.1 Link each Linear story PER-24 through PER-33 to this OpenSpec change and its capability spec.
+- [x] 10.2 Keep implementation tasks and acceptance criteria synchronized with the approved design.
+- [x] 10.3 Verify the real Linear workflow mapping: Backlog, Todo, In Progress, In Review, and Done.
+- [x] 10.4 Document that the orchestrator recommends Todo, developers implement in In Progress, reviewers use In Review, and the user owns Done and merge.
+- [x] 10.5 Run OpenSpec validation before the first implementation handoff and before review handoffs.
+- [x] 10.6 Preserve completion evidence and next steps in the corresponding Linear task comments.
 
 ## 11. Cross-cutting review gates
 
