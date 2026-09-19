@@ -46,25 +46,51 @@ calls.
 ## 2. Docker startup, health, and cleanup
 
 ```bash
-PORT=3000 docker compose up --build -d
+if ! PORT=3000 docker compose up --build -d --wait --wait-timeout 60; then
+  docker compose ps
+  docker compose logs catalog
+  docker compose down --remove-orphans
+  exit 1
+fi
+if ! curl --fail --silent --show-error --max-time 5 \
+  http://127.0.0.1:3000/health; then
+  docker compose ps
+  docker compose logs catalog
+  docker compose down --remove-orphans
+  exit 1
+fi
 docker compose ps
-curl --fail http://127.0.0.1:3000/health
 curl --fail "http://127.0.0.1:3000/products/search?q=desk"
 curl --fail http://127.0.0.1:3000/products/aurora-desk-lamp
 curl --include http://127.0.0.1:3000/products/unknown-product
 ```
 
 Direct evidence: docker compose ps should show catalog running/healthy. The
-health request should return HTTP 200 with {"status":"ok"}. Search and known
-detail return deterministic JSON; unknown detail returns HTTP 404 with
+bounded `docker compose up --wait --wait-timeout 60` command waits for the
+Dockerfile healthcheck, and the following curl must return HTTP 200 with
+{"status":"ok"} before the API checks proceed. If startup or the explicit
+health request fails, the block prints container status and catalog logs,
+executes the cleanup command, and exits non-zero. Search and known detail
+return deterministic JSON; unknown detail returns HTTP 404 with
 PRODUCT_NOT_FOUND. Exact latency and ordering are evidence from the current
 run, not fixed promises.
 
 If port 3000 is occupied:
 
 ```bash
-PORT=3100 docker compose up --build -d
-curl --fail http://127.0.0.1:3100/health
+if ! PORT=3100 docker compose up --build -d --wait --wait-timeout 60; then
+  docker compose ps
+  docker compose logs catalog
+  docker compose down --remove-orphans
+  exit 1
+fi
+if ! curl --fail --silent --show-error --max-time 5 \
+  http://127.0.0.1:3100/health; then
+  docker compose ps
+  docker compose logs catalog
+  docker compose down --remove-orphans
+  exit 1
+fi
 ```
 
 For a failed start, collect evidence before cleanup:
@@ -363,8 +389,19 @@ Capture Docker diagnostics before restarting:
 docker compose ps
 docker compose logs catalog
 docker compose down --remove-orphans
-PORT=3000 docker compose up --build -d
-curl --fail http://127.0.0.1:3000/health
+if ! PORT=3000 docker compose up --build -d --wait --wait-timeout 60; then
+  docker compose ps
+  docker compose logs catalog
+  docker compose down --remove-orphans
+  exit 1
+fi
+if ! curl --fail --silent --show-error --max-time 5 \
+  http://127.0.0.1:3000/health; then
+  docker compose ps
+  docker compose logs catalog
+  docker compose down --remove-orphans
+  exit 1
+fi
 ```
 
 For browser evidence:

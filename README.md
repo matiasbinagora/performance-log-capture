@@ -11,12 +11,6 @@ credentials, or external services.
 - npm
 - Docker Desktop with Docker Compose for the container workflow
 
-## Demo runbook
-
-Follow [the complete English demo runbook](docs/demo-runbook.md) for clean
-setup, Docker health checks, agent prompts, Graphify, dashboard, recovery,
-Archify dependency status, and evidence review.
-
 ## Install
 
 ```bash
