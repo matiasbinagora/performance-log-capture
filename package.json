@@ -23,6 +23,9 @@
     "graphify:search": "node scripts/graphify-project.mjs search",
     "graphify:inspect": "node scripts/graphify-project.mjs inspect",
     "log-analysis": "tsx scripts/log-analysis.ts",
+    "archify:build": "node scripts/archify-diagrams.mjs build",
+    "archify:validate": "node scripts/archify-diagrams.mjs validate",
+    "archify:verify": "node scripts/archify-diagrams.mjs verify",
     "start": "node dist/src/server.js",
     "openspec:validate": "openspec validate performance-log-capture --strict"
   },

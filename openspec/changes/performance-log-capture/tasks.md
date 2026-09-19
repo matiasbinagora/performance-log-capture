@@ -70,11 +70,11 @@
 
 ## 8. Archify documentation — PER-31
 
-- [ ] 8.1 Add the Archify setup and invocation instructions in English.
-- [ ] 8.2 Generate the component architecture diagram with source/documentation references.
-- [ ] 8.3 Generate the manual demo sequence diagram from performance agent to logging agent to QA evidence.
-- [ ] 8.4 Distinguish direct evidence from explanatory inference in the diagrams and supporting text.
-- [ ] 8.5 Open and validate all diagrams locally for the video walkthrough.
+- [x] 8.1 Add the Archify setup and invocation instructions in English.
+- [x] 8.2 Generate the component architecture diagram with source/documentation references.
+- [x] 8.3 Generate the manual demo sequence diagram from performance agent to logging agent to QA evidence.
+- [x] 8.4 Distinguish direct evidence from explanatory inference in the diagrams and supporting text.
+- [x] 8.5 Open and validate all diagrams locally for the video walkthrough.
 
 ## 9. Demo runbook — PER-32
 
