@@ -10,9 +10,9 @@ contract. **Explanatory inference** is narration connecting independent manual
 actions; it is not proof of an automatic handoff.
 
 PER-24 through PER-30 are implemented on the current main line. PER-31
-(Archify visual documentation) is still In Review and is not released on this
-branch. Do not claim its diagrams are available until its pull request is
-merged. The Archify section is dependency-gated.
+(Archify visual documentation) was reviewed and QA-verified, merged into main
+through GitHub PR #8, and is complete; Linear PER-31 is Done. Its diagrams and
+commands are released on the current main line.
 
 The demo is local and requires no AWS access, AWS credentials, database,
 accounts, Linear credentials, GitHub credentials, or other secret. The
@@ -259,10 +259,11 @@ Compare displayed values with the analysis JSON. A plain-English user-impact
 statement or likely cause is explanatory inference or a hypothesis, not a raw
 measurement.
 
-## 6. Archify (PER-31 dependency)
+## 6. Archify (PER-31)
 
-PER-31 is currently In Review. On this branch its files and commands are not
-released. After PER-31 is merged into main, run:
+PER-31 was reviewed and QA-verified, merged into main through GitHub PR #8, and
+is complete; Linear PER-31 is Done. The Archify files and commands are
+available on the current main line. Run:
 
 ```bash
 npm run archify:build
@@ -277,21 +278,47 @@ docs/archify/architecture.html
 docs/archify/manual-demo-sequence.html
 ```
 
-Open directly or through a local-only server:
+Open directly or through a local-only server started from the repository root:
 
 ```bash
 open docs/archify/architecture.html
 open docs/archify/manual-demo-sequence.html
-python3 -m http.server 4174 --directory docs/archify
-open http://127.0.0.1:4174/architecture.html
-open http://127.0.0.1:4174/manual-demo-sequence.html
+python3 -m http.server 4174 --directory .
+open http://127.0.0.1:4174/docs/archify/architecture.html
+open http://127.0.0.1:4174/docs/archify/manual-demo-sequence.html
+```
+
+The exact browser URLs for the two diagrams are:
+
+```text
+http://127.0.0.1:4174/docs/archify/architecture.html
+http://127.0.0.1:4174/docs/archify/manual-demo-sequence.html
+```
+
+Serving the repository root is required because the generated diagram links
+use paths such as `../../src/...` from pages under `docs/archify/`. Verify these
+representative directory links and source-reference links in the same browser;
+each should resolve successfully with HTTP 200 or 304:
+
+```text
+http://127.0.0.1:4174/src/
+http://127.0.0.1:4174/scripts/
+http://127.0.0.1:4174/tests/
+http://127.0.0.1:4174/docs/
+http://127.0.0.1:4174/openspec/
+http://127.0.0.1:4174/.github/workflows/
+http://127.0.0.1:4174/src/performance/runner.ts
+http://127.0.0.1:4174/scripts/performance-run.ts
+http://127.0.0.1:4174/tests/e2e/dashboard.spec.ts
+http://127.0.0.1:4174/docs/graphify-demo.md
+http://127.0.0.1:4174/openspec/changes/performance-log-capture/specs/archify-documentation/spec.md
+http://127.0.0.1:4174/.github/workflows/per-30-playwright-evidence.yml
 ```
 
 Show the component architecture, then the manual sequence from performance
 agent through logging agent, Graphify, dashboard, Playwright, and the
 GitHub/Linear handoff. Verify every linked repository-relative path. The
-diagrams label direct evidence and explanatory inference separately. These
-commands are dependency-gated and are not a claim that PER-31 is merged.
+diagrams label direct evidence and explanatory inference separately.
 
 
 ## 7. Reset and recovery
@@ -358,8 +385,7 @@ interrupted, confirm no server remains on the configured port before rerunning.
 ## 8. Evidence walkthrough
 
 1. **Linear:** show the performance-log-capture project and PER-24 through
-   PER-32. Show PER-31 as In Review and explain that its diagrams are not
-   released.
+   PER-32. Show PER-31 as Done after review and QA verification.
 2. **GitHub:** show the repository tree and relevant src/, scripts/, docs/,
    tests/, and OpenSpec files, then the dependency PRs. Do not imply a PR is
    merged unless GitHub shows it as merged; PR #8 is the PER-31 boundary.
@@ -371,8 +397,9 @@ interrupted, confirm no server remains on the configured port before rerunning.
    paths/lines, or the unavailable fallback.
 6. **Dashboard:** open runs/<run-id>/dashboard.html via filesystem or local
    HTTP and compare it with analysis JSON.
-7. **Archify:** only after PER-31 merges, open both docs/archify/ diagrams and
-   show their evidence legend and links; before then show the dependency status.
+7. **Archify:** open both docs/archify/ diagrams through the documented
+   repository-root server, show their evidence legend and links, and verify the
+   representative HTTP URLs above.
 8. **Playwright:** show playwright-report/, relevant test-results/ videos,
    screenshots, traces, and logs; for CI show playwright-artifacts/, metadata,
    workflow run, and uploaded artifact. Keep videos outside Git history.
@@ -402,7 +429,7 @@ performance smoke, logging against complete and incomplete input, dashboard
 filesystem/HTTP opening, and Graphify available/unavailable paths. Execute the
 full 60-second/20,000-request profile when appropriate for the recording.
 
-After PER-31 merges, add the three Archify commands and opening checks to the
-same clean validation pass. Until then, the correct evidence is that Archify is
-dependency-gated and not released. Never report a check as passed unless it ran;
-record Docker, Chromium, Graphify, or dependency limitations explicitly.
+Run the three Archify commands and the documented repository-root HTTP opening
+and source-link checks in the same clean validation pass. Never report a check
+as passed unless it ran; record Docker, Chromium, or Graphify limitations
+explicitly.
