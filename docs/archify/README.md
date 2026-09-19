@@ -66,16 +66,24 @@ open docs/archify/manual-demo-sequence.html
 Or use a local-only static server if the browser blocks local file navigation:
 
 ```bash
-python3 -m http.server 4174 --directory docs/archify
-open http://127.0.0.1:4174/architecture.html
-open http://127.0.0.1:4174/manual-demo-sequence.html
+python3 -m http.server 4174 --directory .
+open http://127.0.0.1:4174/docs/archify/architecture.html
+open http://127.0.0.1:4174/docs/archify/manual-demo-sequence.html
 ```
 
-The `http.server` command is only a local viewing aid; the committed diagrams
-remain self-contained. Use the **Toggle theme** control and the cross-links to
-inspect both diagrams before a demo recording. The browser should show the
-complete SVG, readable node labels, source-reference cards, and the direct vs
-inference legend without horizontal clipping at normal desktop width.
+Run that command from the repository root. Serving the repository root is
+required because generated source links use paths such as `../../src/...` from
+the `docs/archify/` pages. The `http.server` command is only a local viewing
+aid; the committed diagrams remain self-contained. Use the **Toggle theme**
+control and the cross-links to inspect both diagrams before a demo recording.
+The browser should show the complete SVG, readable node labels,
+source-reference cards, and the direct vs inference/return legend without
+horizontal clipping at normal desktop width. Representative source links such
+as `.codex/agents/performance-agent.md` and `src/performance/runner.ts` should
+return HTTP 200 under the documented root server. In the sequence diagram,
+solid green lines are direct evidence, amber dashed lines are explanatory
+inference, and gray dashed lines are the explicit `return: true` messages or
+publication acknowledgements.
 
 ## Regenerate deterministically
 
@@ -132,6 +140,9 @@ The relevant contracts are:
 - **The browser shows only part of a diagram:** use a desktop viewport or the
   local server command above. The stage is intentionally horizontally scrollable
   for narrow screens while retaining a readable desktop layout.
+- **A source link returns 404:** confirm the server was started from the
+  repository root with `--directory .`, then open the `/docs/archify/` URL shown
+  above rather than the old `/architecture.html` shortcut.
 - **The optional upstream Archify CLI is unavailable:** this checkout does not
   vendor a global skill installation. The committed renderer is the no-network
   fallback used here; it produces the same intended local artifact shape—source

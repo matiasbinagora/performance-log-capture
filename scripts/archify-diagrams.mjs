@@ -11,6 +11,10 @@ const specs = [
   { file: 'architecture.json', html: 'architecture.html', kind: 'architecture' },
   { file: 'manual-demo-sequence.json', html: 'manual-demo-sequence.html', kind: 'sequence' },
 ];
+const sequenceCanvasWidth = 1900;
+const participantCardWidth = 164;
+const participantCardHeight = 60;
+const participantCardHalfWidth = participantCardWidth / 2;
 
 const esc = (value) => String(value ?? '')
   .replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
@@ -53,7 +57,7 @@ function palette() {
 }
 
 function markers() {
-  return `<defs><marker id="arrow-direct" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto"><path d="M0,0 L10,4 L0,8 z" fill="var(--direct)"/></marker><marker id="arrow-inference" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto"><path d="M0,0 L10,4 L0,8 z" fill="var(--inference)"/></marker></defs>`;
+  return `<defs><marker id="arrow-direct" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto"><path d="M0,0 L10,4 L0,8 z" fill="var(--direct)"/></marker><marker id="arrow-inference" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto"><path d="M0,0 L10,4 L0,8 z" fill="var(--inference)"/></marker><marker id="arrow-return" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto"><path d="M0,0 L10,4 L0,8 z" fill="var(--muted)"/></marker></defs>`;
 }
 
 function architectureSvg(spec) {
@@ -87,17 +91,18 @@ function architectureSvg(spec) {
 }
 
 function sequenceSvg(spec) {
-  const width = 1900; const height = 1060; const top = 118; const bottom = 1000;
+  const width = sequenceCanvasWidth; const height = 1060; const top = 118; const bottom = 1000;
   const byId = Object.fromEntries(spec.participants.map((p) => [p.id, p]));
   const grid = Array.from({ length: 10 }, (_, index) => `<line class="grid-line" x1="30" y1="${top + index * 90}" x2="${width - 30}" y2="${top + index * 90}"/>`).join('');
-  const participantMarkup = spec.participants.map((p) => `<rect class="participant" x="${p.x - 82}" y="30" width="164" height="60" rx="10"/><text class="participant-title" x="${p.x}" y="56" text-anchor="middle">${xml(p.label)}</text><text class="participant-detail" x="${p.x}" y="74" text-anchor="middle">${xml(p.detail)}</text><line class="lifeline" x1="${p.x}" y1="${top}" x2="${p.x}" y2="${bottom}"/>`).join('');
+  const participantMarkup = spec.participants.map((p) => `<rect class="participant" x="${p.x - participantCardHalfWidth}" y="30" width="${participantCardWidth}" height="${participantCardHeight}" rx="10"/><text class="participant-title" x="${p.x}" y="56" text-anchor="middle">${xml(p.label)}</text><text class="participant-detail" x="${p.x}" y="74" text-anchor="middle">${xml(p.detail)}</text><line class="lifeline" x1="${p.x}" y1="${top}" x2="${p.x}" y2="${bottom}"/>`).join('');
   const messageMarkup = spec.messages.map((m) => {
-    const from = byId[m.from].x; const to = byId[m.to].x; const kind = m.kind ?? 'direct';
+    const from = byId[m.from].x; const to = byId[m.to].x; const kind = m.kind ?? 'direct'; const edgeKind = m.return ? 'return' : kind;
     const lx = (from + to) / 2; const x1 = from < to ? from + 4 : from - 4; const x2 = from < to ? to - 4 : to + 4;
     const labelWidth = Math.max(130, m.label.length * 7.1 + 22);
-    return `<text class="step" x="48" y="${m.y + 4}">${xml(m.step)}</text><line class="edge ${kind}" x1="${x1}" y1="${m.y}" x2="${x2}" y2="${m.y}" marker-end="url(#arrow-${kind === 'inference' ? 'inference' : 'direct'})"/><rect class="message-label-bg" x="${lx - labelWidth / 2}" y="${m.y - 24}" width="${labelWidth}" height="20" rx="5"/><text class="message-label" x="${lx}" y="${m.y - 10}" text-anchor="middle">${xml(m.label)}</text>`;
+    const marker = edgeKind === 'inference' ? 'inference' : edgeKind === 'return' ? 'return' : 'direct';
+    return `<text class="step" x="48" y="${m.y + 4}">${xml(m.step)}</text><line class="edge ${edgeKind}" x1="${x1}" y1="${m.y}" x2="${x2}" y2="${m.y}" marker-end="url(#arrow-${marker})"/><rect class="message-label-bg" x="${lx - labelWidth / 2}" y="${m.y - 24}" width="${labelWidth}" height="20" rx="5"/><text class="message-label" x="${lx}" y="${m.y - 10}" text-anchor="middle">${xml(m.label)}</text>`;
   }).join('');
-  return `<svg viewBox="0 0 ${width} ${height}" role="img" aria-labelledby="diagram-title diagram-desc"><title id="diagram-title">${xml(spec.title)}</title><desc id="diagram-desc">${xml(spec.description)}</desc>${markers()}<rect class="diagram-bg" width="${width}" height="${height}" rx="12"/>${grid}${participantMarkup}${messageMarkup}<text class="node-detail" x="60" y="1030">Green solid = direct evidence · Amber dashed = explanatory inference · Dashed message = return or publication acknowledgement</text></svg>`;
+  return `<svg viewBox="0 0 ${width} ${height}" role="img" aria-labelledby="diagram-title diagram-desc"><title id="diagram-title">${xml(spec.title)}</title><desc id="diagram-desc">${xml(spec.description)}</desc>${markers()}<rect class="diagram-bg" width="${width}" height="${height}" rx="12"/>${grid}${participantMarkup}${messageMarkup}<text class="node-detail" x="60" y="1030">Green solid = direct evidence · Amber dashed = explanatory inference · Gray dashed = return or publication acknowledgement</text></svg>`;
 }
 
 function htmlFor(spec, svg) {
@@ -119,6 +124,20 @@ function checkSpec(spec, filePath) {
     ? (spec.nodes ?? []).flatMap((n) => [n.x, n.y, n.w, n.h])
     : (spec.participants ?? []).flatMap((p) => [p.x]);
   if (numericFields.some((value) => !Number.isFinite(value))) errors.push('all diagram coordinates must be finite numbers');
+  if (spec.diagramType === 'sequence') {
+    const participants = [...(spec.participants ?? [])].sort((a, b) => a.x - b.x);
+    participants.forEach((participant, index) => {
+      if (participant.x - participantCardHalfWidth < 0 || participant.x + participantCardHalfWidth > sequenceCanvasWidth) {
+        errors.push(`participant card is clipped by the sequence canvas: ${participant.id}`);
+      }
+      const labelWidth = String(participant.label ?? '').length * 7.8 + 20;
+      const detailWidth = String(participant.detail ?? '').length * 6.2 + 20;
+      if (labelWidth > participantCardWidth || detailWidth > participantCardWidth) errors.push(`participant label may not fit its card: ${participant.id}`);
+      if (index > 0 && participant.x - participants[index - 1].x < participantCardWidth) {
+        errors.push(`participant cards overlap: ${participants[index - 1].id} and ${participant.id}`);
+      }
+    });
+  }
   if (spec.diagramType === 'architecture') {
     const idSet = new Set(ids);
     for (const edge of spec.edges ?? []) if (!idSet.has(edge.from) || !idSet.has(edge.to)) errors.push(`edge references unknown node: ${edge.from} -> ${edge.to}`);
