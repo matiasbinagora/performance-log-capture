@@ -78,6 +78,39 @@ describe('log analyzer validation and metrics', () => {
     expect(first).toEqual(second); expect(first.status).toBe('complete'); expect(first.facts.requestCount).toBe(3); expect(first.facts.failureCount).toBe(1); expect(first.derivedFindings.join(' ')).toContain('product_search is the slowest');
   });
 
+  it('keeps filesystem reads absolute while serializing safe repository-relative artifact references', async () => {
+    const directory = await fixture([event('run-fixture', 'req-1')]);
+    const graphifyEvidence = join(directory, 'graphify-search.txt');
+    await fs.writeFile(graphifyEvidence, 'source evidence');
+    const result = await analyzeRun(directory, { graphifyEvidencePath: graphifyEvidence });
+
+    expect(result.inputDirectory).toBe('runs/run-fixture');
+    expect(result.files).toEqual({
+      'config.json': 'runs/run-fixture/config.json',
+      'requests.jsonl': 'runs/run-fixture/requests.jsonl',
+      'application.log': 'runs/run-fixture/application.log',
+      'summary.json': 'runs/run-fixture/summary.json',
+    });
+    expect(result.dashboardPath).toBe('runs/run-fixture/dashboard.html');
+    expect(result.graphify).toMatchObject({ status: 'available', evidencePath: null });
+    expect(JSON.stringify(result)).not.toContain(directory);
+    expect(JSON.stringify(result)).not.toContain(graphifyEvidence);
+  });
+
+  it('normalizes repository-local Graphify evidence without exposing its absolute path', async () => {
+    const directory = await fixture([event('run-fixture', 'req-1')]);
+    const graphifyEvidence = join(process.cwd(), 'graphify-out', 'evidence', 'regression.txt');
+    await fs.mkdir(join(process.cwd(), 'graphify-out', 'evidence'), { recursive: true });
+    await fs.writeFile(graphifyEvidence, 'source evidence');
+    try {
+      const result = await analyzeRun(directory, { graphifyEvidencePath: graphifyEvidence });
+      expect(result.graphify).toMatchObject({ status: 'available', evidencePath: 'graphify-out/evidence/regression.txt' });
+      expect(JSON.stringify(result)).not.toContain(graphifyEvidence);
+    } finally {
+      await fs.rm(graphifyEvidence, { force: true });
+    }
+  });
+
   it('keeps bounded streaming metrics and excludes invalid records from conclusions', async () => {
     const events = Array.from({ length: 10_050 }, (_, index) => event('run-fixture', `req-${index}`, 'product_search', 200, index)); const directory = await fixture(events); const result = await analyzeRun(directory);
     expect(result.status).toBe('complete'); expect(result.facts.requestCount).toBe(10_050); expect(result.metrics.overall.latencyMs.max).toBe(10_049);
