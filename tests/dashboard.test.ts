@@ -150,4 +150,14 @@ describe('standalone dashboard', () => {
     expect(codes(make('runs/demo-run-42', 'runs/demo-run-42/summary.json', 'runs/demo-run-42-other/dashboard.html'))).toContain('ARTIFACT_RELATIONSHIP_MISMATCH');
     expect(codes({ ...make('runs/demo-run-42', 'runs/demo-run-42/summary.json'), files: { ...(fixture.files as Record<string, unknown>), 'summary.json': '' } })).toContain('MISSING_REQUIRED_FIELD');
   });
+
+  it('rejects traversal, prefix collisions, and unrelated paths for every required artifact', () => {
+    const artifactNames = ['config.json', 'requests.jsonl', 'application.log', 'summary.json'];
+    for (const artifactName of artifactNames) {
+      const withArtifact = (path: string) => ({ ...fixture, files: { ...(fixture.files as Record<string, unknown>), [artifactName]: path } });
+      expect(validateAnalysis(withArtifact(`runs/demo-run-42-other/${artifactName}`)).issues.map((issue) => issue.code)).toContain('ARTIFACT_RELATIONSHIP_MISMATCH');
+      expect(validateAnalysis(withArtifact(`runs/demo-run-42/../demo-run-42-other/${artifactName}`)).issues.map((issue) => issue.code)).toContain('ARTIFACT_RELATIONSHIP_MISMATCH');
+      expect(validateAnalysis(withArtifact(`runs/unrelated/${artifactName}`)).issues.map((issue) => issue.code)).toContain('ARTIFACT_RELATIONSHIP_MISMATCH');
+    }
+  });
 });

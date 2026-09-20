@@ -1,5 +1,5 @@
 import { createReadStream, promises as fs } from 'node:fs';
-import { basename, join, resolve } from 'node:path';
+import { basename, join, relative, resolve } from 'node:path';
 import { createInterface } from 'node:readline';
 
 const REQUIRED_FILES = ['config.json', 'requests.jsonl', 'application.log', 'summary.json'] as const;
@@ -9,6 +9,9 @@ const MAX_LATENCY_SAMPLES = 10_000;
 const MAX_REQUESTS = 100_000;
 const MAX_CONCURRENCY = 1_000;
 const MAX_DURATION_SECONDS = 3_600;
+const RUN_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
+const UNKNOWN_RUN_ID = 'unknown-run';
+const REPOSITORY_ROOT = resolve(process.cwd());
 export type Operation = (typeof OPERATIONS)[number];
 export type AnalysisStatus = 'complete' | 'incomplete';
 
@@ -29,24 +32,50 @@ interface ValidConfig { readonly runId: string; readonly baseUrl: string; readon
 interface MutableMetric { durations: number[]; totalDuration: number; maxDuration: number; requestCount: number; successCount: number; failureCount: number; statusCodes: Record<string, number>; errors: Record<string, number>; }
 
 export async function analyzeRun(inputDirectory: string, options: { graphifyEvidencePath?: string } = {}): Promise<AnalysisResult> {
-  const directory = resolve(inputDirectory); const issues: AnalysisIssue[] = []; const files: Record<string, string> = Object.fromEntries(REQUIRED_FILES.map((file) => [file, join(directory, file)]));
-  const present = await validateRequiredFiles(files, issues);
-  const rawConfig = present['config.json'] ? await readJsonFile<RunConfigInput>(files['config.json']!, 'config.json', issues) : null;
+  const directory = resolve(inputDirectory); const issues: AnalysisIssue[] = []; const filesystemFiles: Record<string, string> = Object.fromEntries(REQUIRED_FILES.map((file) => [file, join(directory, file)]));
+  const present = await validateRequiredFiles(filesystemFiles, issues);
+  const rawConfig = present['config.json'] ? await readJsonFile<RunConfigInput>(filesystemFiles['config.json']!, 'config.json', issues) : null;
   const config = rawConfig ? validateConfig(rawConfig, issues) : null;
-  const summary = present['summary.json'] ? await readJsonFile<SummaryInput>(files['summary.json']!, 'summary.json', issues) : null;
+  const summary = present['summary.json'] ? await readJsonFile<SummaryInput>(filesystemFiles['summary.json']!, 'summary.json', issues) : null;
   if (summary) validateSummary(summary, issues);
   const configRunId = typeof rawConfig?.runId === 'string' && rawConfig.runId.trim() ? rawConfig.runId : null;
   const summaryRunId = typeof summary?.runId === 'string' && summary.runId.trim() ? summary.runId : null;
   if (configRunId && summaryRunId && configRunId !== summaryRunId) addRunMismatch(issues, 'config.json', configRunId, 'summary.json', summaryRunId);
   const runId = config?.runId ?? configRunId ?? summaryRunId;
   const metrics = new Map<Operation, MutableMetric>(OPERATIONS.map((operation) => [operation, emptyMetric()])); const overall = emptyMetric(); const examples = { success: [] as Example[], slow: [] as Example[], errors: [] as Example[] }; const requestIds = new Set<string>(); let validEvents = 0;
-  if (present['requests.jsonl']) await readEvents(files['requests.jsonl']!, runId, metrics, overall, examples, requestIds, issues, (count) => { validEvents = count; });
-  if (present['application.log']) await validateApplicationLog(files['application.log']!, runId, issues);
+  if (present['requests.jsonl']) await readEvents(filesystemFiles['requests.jsonl']!, runId, metrics, overall, examples, requestIds, issues, (count) => { validEvents = count; });
+  if (present['application.log']) await validateApplicationLog(filesystemFiles['application.log']!, runId, issues);
   if (summary && summary.status === 'incomplete') issues.push({ code: 'RUN_INCOMPLETE', message: `summary.json marks run '${String(summary.runId)}' as incomplete.` });
   if (summary && typeof summary.actualRequests === 'number' && summary.actualRequests !== validEvents) issues.push({ code: 'SUMMARY_COUNT_MISMATCH', message: `summary.json reports ${summary.actualRequests} requests but ${validEvents} valid request records were analyzed.`, source: { file: 'summary.json' } });
   const durationMs = typeof summary?.durationMs === 'number' && Number.isFinite(summary.durationMs) ? summary.durationMs : 0; const byOperation = Object.fromEntries(OPERATIONS.map((operation) => [operation, finalizeMetric(metrics.get(operation)!, durationMs)])) as Record<Operation, OperationMetrics>; const overallMetric = finalizeMetric(overall, durationMs); const status: AnalysisStatus = issues.length === 0 && config !== null && validEvents > 0 ? 'complete' : 'incomplete';
-  const derivedFindings = status === 'complete' ? deriveFindings(byOperation, overallMetric, examples) : []; const graphifyPath = options.graphifyEvidencePath ? resolve(options.graphifyEvidencePath) : null; const graphifyAvailable = graphifyPath ? await fileExists(graphifyPath) : false;
-  return { schemaVersion: 1, status, runId, inputDirectory: directory, files, facts: { requestCount: overallMetric.requestCount, successCount: overallMetric.successCount, failureCount: overallMetric.failureCount, errorRate: overallMetric.errorRate, statusCodes: overallMetric.statusCodes, errors: overallMetric.errors, durationMs, interrupted: summary?.status === 'incomplete' }, metrics: { overall: overallMetric, byOperation }, examples, derivedFindings, hypotheses: graphifyAvailable ? ['The measured search slowdown should be connected to source evidence in the supplied Graphify result.'] : [], issues, graphify: graphifyAvailable ? { status: 'available', evidencePath: graphifyPath, note: 'Graphify evidence was supplied by the caller; inspect its source references before stating a root cause.' } : { status: 'unavailable', evidencePath: null, note: 'code evidence unavailable; measured log analysis is still retained.' }, dashboardPath: join(directory, 'dashboard.html') };
+  const derivedFindings = status === 'complete' ? deriveFindings(byOperation, overallMetric, examples) : [];
+  const serializedRunRoot = repositoryRunRoot(runId, directory);
+  const files = Object.fromEntries(REQUIRED_FILES.map((file) => [file, repositoryRunArtifact(serializedRunRoot, file)]));
+  const graphifyPath = options.graphifyEvidencePath ? resolve(options.graphifyEvidencePath) : null;
+  const graphifyAvailable = graphifyPath ? await fileExists(graphifyPath) : false;
+  const graphifyReference = graphifyPath ? repositoryRelativePath(graphifyPath) : null;
+  const graphify = graphifyAvailable
+    ? graphifyReference
+      ? { status: 'available' as const, evidencePath: graphifyReference, note: 'Graphify evidence was supplied by the caller; inspect its repository-relative source references before stating a root cause.' }
+      : { status: 'available' as const, evidencePath: null, note: 'Graphify evidence was supplied and exists, but its machine-local path is omitted from this analysis; inspect the caller-supplied evidence separately before stating a root cause.' }
+    : { status: 'unavailable' as const, evidencePath: null, note: 'code evidence unavailable; measured log analysis is still retained.' };
+  return { schemaVersion: 1, status, runId, inputDirectory: serializedRunRoot, files, facts: { requestCount: overallMetric.requestCount, successCount: overallMetric.successCount, failureCount: overallMetric.failureCount, errorRate: overallMetric.errorRate, statusCodes: overallMetric.statusCodes, errors: overallMetric.errors, durationMs, interrupted: summary?.status === 'incomplete' }, metrics: { overall: overallMetric, byOperation }, examples, derivedFindings, hypotheses: graphifyAvailable ? ['The measured search slowdown should be connected to source evidence in the supplied Graphify result.'] : [], issues, graphify, dashboardPath: repositoryRunArtifact(serializedRunRoot, 'dashboard.html') };
+}
+
+function repositoryRunRoot(runId: string | null, directory: string): string {
+  const candidate = runId ?? basename(directory);
+  const serializedRunId = RUN_ID.test(candidate) ? candidate : UNKNOWN_RUN_ID;
+  return repositoryPath('runs', serializedRunId);
+}
+
+function repositoryRunArtifact(runRoot: string, file: string): string { return repositoryPath(runRoot, file); }
+
+function repositoryPath(...segments: string[]): string { return join(...segments).replaceAll('\\', '/'); }
+
+function repositoryRelativePath(path: string): string | null {
+  const candidate = relative(REPOSITORY_ROOT, path).replaceAll('\\', '/');
+  if (!candidate || candidate === '..' || candidate.startsWith('../') || candidate.startsWith('/')) return null;
+  return candidate;
 }
 
 async function validateRequiredFiles(files: Record<string, string>, issues: AnalysisIssue[]): Promise<Record<string, boolean>> { const present: Record<string, boolean> = {}; for (const file of REQUIRED_FILES) { present[file] = await fileExists(files[file]!); if (!present[file]) issues.push({ code: 'MISSING_FILE', message: `Required artifact '${file}' is missing.`, source: { file } }); } return present; }
