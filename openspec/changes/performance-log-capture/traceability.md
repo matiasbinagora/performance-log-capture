@@ -51,9 +51,9 @@ converted into claims.
 - Owner/connections: `global-orchestrator` for instructions and `global-backend-developer` for support scripts; demo agent has no Linear/GitHub access.
 - Dependencies: PER-24 and PER-25.
 - Acceptance criteria: Linear PER-26 acceptance criteria for English agent instructions, the four run artifacts, measured summaries, incomplete-run handling, default profile, and logging-agent handoff.
-- Implementation evidence: GitHub PR #3; final remediation evidence identifies head `40944f85bcb7665f9ab26a3819b7aae8db089677`; merge commit `74c2dfa` is in `origin/main`.
-- Review evidence: QA recorded reviewer approval from `matias-code-reviewer-agent[bot]` on exact head `40944f85bcb7665f9ab26a3819b7aae8db089677`.
-- QA evidence: Linear QA PASS with documented Docker/tsx runtime limitations; 19 tests, compiled fixture runs, artifact/run-ID checks, strict OpenSpec, and secret scans passed.
+- Implementation evidence: GitHub [PR #3](https://github.com/matiasbinagora/performance-log-capture/pull/3) was merged with final head [`fd0987a36b68ee31bd16626b218c88357b2c8b26`](https://github.com/matiasbinagora/performance-log-capture/commit/fd0987a36b68ee31bd16626b218c88357b2c8b26); merge commit [`74c2dfa`](https://github.com/matiasbinagora/performance-log-capture/commit/74c2dfa) is in `origin/main`.
+- Review evidence: GitHub reviewer approval is recorded on the remediation predecessor [`40944f85bcb7665f9ab26a3819b7aae8db089677`](https://github.com/matiasbinagora/performance-log-capture/commit/40944f85bcb7665f9ab26a3819b7aae8db089677) before the final branch rebase; GitHub PR #3 metadata verifies that `fd0987a36b68ee31bd16626b218c88357b2c8b26` is the merged head. The Linear PER-26 record documents the final-head rebase and validation handoff.
+- QA evidence: Linear PER-26 records QA PASS for remediation head `40944f85bcb7665f9ab26a3819b7aae8db089677` with documented Docker/tsx runtime limitations; its final-head handoff records validation for `fd0987a36b68ee31bd16626b218c88357b2c8b26`. The evidence includes 19 tests, compiled fixture runs, artifact/run-ID checks, strict OpenSpec, and secret scans.
 - Final status: Linear `Done`; PR #3 is closed and merge commit `74c2dfa` is present on `origin/main`.
 
 ### PER-27 — Create the log analysis agent
@@ -128,13 +128,13 @@ converted into claims.
 - Owner/connections: `global-orchestrator`; Linear `linear_orchestrator`; GitHub publication only for this documentation PR.
 - Dependencies: approved design and PER-24 through PER-32.
 - Acceptance criteria: Linear PER-33 acceptance criteria for pre-implementation OpenSpec, story links, English evidence, complete read-before-work, identity verification before mutation, completion evidence/next steps, and approved-story scope.
-- Implementation evidence: this traceability index plus the synchronized task checklist and Linear description/comment records; PR to be supplied after publication.
-- Review evidence: pending independent code review for the documentation PR.
-- QA evidence: pending independent QA of the index, issue references, workflow mapping, validation gates, and scope/security scans.
+- Implementation evidence: this traceability index (`openspec/changes/performance-log-capture/traceability.md`), the synchronized task checklist (`openspec/changes/performance-log-capture/tasks.md`), and the [Linear PER-33 record](https://linear.app/matias-personal/issue/PER-33/establish-openspec-and-linear-traceability), including its description and evidence comments. The implementation is published in [GitHub PR #10](https://github.com/matiasbinagora/performance-log-capture/pull/10) at exact head `7b182fddeea9aabe9b16ebbe501844a94c91395d`, based on `main` at `d715dbecf0465457755ed6fba3c07331bd1c0c1b`; PR #10 currently contains exactly these two documentation files.
+- Review evidence: the independent reviewer submitted [CHANGES_REQUESTED](https://github.com/matiasbinagora/performance-log-capture/pull/10#pullrequestreview-5258451494) for exact head `7b182fddeea9aabe9b16ebbe501844a94c91395d`. The two unresolved MEDIUM findings are recorded in [the PER-26 evidence discussion](https://github.com/matiasbinagora/performance-log-capture/pull/10#discussion_r4055425512) and [the PER-33 self-reference discussion](https://github.com/matiasbinagora/performance-log-capture/pull/10#discussion_r4055425582); re-review remains pending after this correction.
+- QA evidence: the published [Playwright check](https://github.com/matiasbinagora/performance-log-capture/actions/runs/35477022047) succeeded, but independent QA of the corrected traceability index and exact new PR head remains pending. No QA approval or completion is claimed.
 - Final status: Linear `In Review` after publication, never `Done` in this session; the user retains merge and final status authority.
 
 ## Validation record
 
-- `openspec validate performance-log-capture --type change --strict --no-interactive`: required gate; result to be recorded in the publication handoff.
+- `openspec validate performance-log-capture --type change --strict --no-interactive`: PASS for the published documentation change; rerun for the corrected PR head before re-review.
 - Repository behavior is unchanged: this change contains only OpenSpec traceability documentation and checklist updates.
 - Final diff must be checked for secrets, generated artifacts, temporary files, unrelated product changes, and whitespace errors before publication.
