@@ -1,5 +1,5 @@
 import { createReadStream, promises as fs } from 'node:fs';
-import { basename, join, relative, resolve } from 'node:path';
+import { basename, isAbsolute, join, relative, resolve } from 'node:path';
 import { createInterface } from 'node:readline';
 
 const REQUIRED_FILES = ['config.json', 'requests.jsonl', 'application.log', 'summary.json'] as const;
@@ -74,7 +74,7 @@ function repositoryPath(...segments: string[]): string { return join(...segments
 
 function repositoryRelativePath(path: string): string | null {
   const candidate = relative(REPOSITORY_ROOT, path).replaceAll('\\', '/');
-  if (!candidate || candidate === '..' || candidate.startsWith('../') || candidate.startsWith('/')) return null;
+  if (!candidate || isAbsolute(candidate) || candidate === '..' || candidate.startsWith('../') || candidate.startsWith('/')) return null;
   return candidate;
 }
 
